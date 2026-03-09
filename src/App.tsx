@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { format, differenceInDays, parseISO, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -17,7 +17,17 @@ interface Product {
 export default function App() {
   const [activeTab, setActiveTab] = useState<'add' | 'pantry' | 'recipe'>('pantry');
   
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(() => {
+    const salvati = localStorage.getItem('miaDispensa');
+    if (salvati) {
+      return JSON.parse(salvati);
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('miaDispensa', JSON.stringify(products));
+  }, [products]);
   const [newProductName, setNewProductName] = useState('');
   const [newProductDate, setNewProductDate] = useState('');
   const [servings, setServings] = useState<number>(2);

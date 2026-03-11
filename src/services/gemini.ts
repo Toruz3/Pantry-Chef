@@ -1,45 +1,21 @@
 import { GoogleGenAI, Type } from "@google/genai";
-
-// Initialize the Gemini API client
-// We use the environment variable provided by the platform
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
-export interface ExtractedProduct {
-  name: string;
-  expirationDate: string | null;
-}
-
-export interface UsedProduct {
-  productId: string;
-  name: string;
-  quantity: number;
-  unit: string;
-}
-
-export interface GeneratedRecipe {
-  title: string;
-  ingredients: string[];
-  instructions: string[];
-  prepTime: string;
-  servings: number;
-  usedProducts: UsedProduct[];
-  imageUrl?: string;
-}
+import { ExtractedProduct, AudioExtractedProduct, GeneratedRecipe } from "../types";
 
 export async function analyzeProductImage(base64Image: string, mimeType: string): Promise<ExtractedProduct> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-3-flash-preview",
       contents: {
         parts: [
           {
             inlineData: {
-              data: base64Image,
+              data: base64Image.split(',')[1] || base64Image,
               mimeType: mimeType,
             },
           },
           {
-            text: "Analizza questa immagine di un prodotto alimentare. Estrai il nome del prodotto (in italiano) e la data di scadenza. Restituisci il risultato come oggetto JSON con 'name' (stringa) e 'expirationDate' (stringa nel formato YYYY-MM-DD). Se non riesci a trovare la data di scadenza o il nome, restituisci null per quel campo. Non includere alcuna formattazione markdown, solo il JSON grezzo.",
+            text: "Analizza questa immagine di un prodotto alimentare. Estrai il nome del prodotto (in italiano), la data di scadenza e la categoria. Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Restituisci il risultato come oggetto JSON con 'name' (stringa), 'expirationDate' (stringa nel formato YYYY-MM-DD) e 'category' (stringa). Se non riesci a trovare la data di scadenza o il nome, restituisci null per quel campo. Non includere alcuna formattazione markdown, solo il JSON grezzo.",
           },
         ],
       },
@@ -56,6 +32,10 @@ export async function analyzeProductImage(base64Image: string, mimeType: string)
               type: Type.STRING,
               description: "La data di scadenza del prodotto nel formato YYYY-MM-DD. Null se non trovata.",
             },
+            category: {
+              type: Type.STRING,
+              description: "La categoria del prodotto (es. Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro).",
+            },
           },
           required: ["name"],
         },
@@ -65,33 +45,88 @@ export async function analyzeProductImage(base64Image: string, mimeType: string)
     const text = response.text;
     if (!text) throw new Error("Nessuna risposta da Gemini");
     
-    return JSON.parse(text) as ExtractedProduct;
+    return JSON.parse(text);
   } catch (error) {
     console.error("Errore durante l'analisi dell'immagine:", error);
-    throw new Error("Impossibile analizzare l'immagine. Riprova.");
+    throw error;
+  }
+}
+
+export async function analyzeAudioProducts(base64Audio: string, mimeType: string): Promise<AudioExtractedProduct[]> {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Audio.split(',')[1] || base64Audio,
+              mimeType: mimeType,
+            },
+          },
+          {
+            text: "Analizza questo audio in cui l'utente elenca dei prodotti da aggiungere alla dispensa. Estrai una lista di prodotti con nome, quantità, unità di misura (g, kg, ml, l, pz, scatolette, confezioni), data di scadenza (formato YYYY-MM-DD) e categoria. Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Se la data di scadenza non è specificata o non è chiara, restituisci null per quel campo. Se la quantità non è specificata, usa 1. Se l'unità non è specificata, usa 'pz'. Restituisci il risultato come array JSON.",
+          },
+        ],
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: {
+                type: Type.STRING,
+                description: "Il nome del prodotto alimentare in italiano.",
+              },
+              quantity: {
+                type: Type.NUMBER,
+                description: "La quantità del prodotto.",
+              },
+              unit: {
+                type: Type.STRING,
+                description: "L'unità di misura (g, kg, ml, l, pz, scatolette, confezioni).",
+              },
+              expirationDate: {
+                type: Type.STRING,
+                description: "La data di scadenza del prodotto nel formato YYYY-MM-DD. Null se non trovata.",
+              },
+              category: {
+                type: Type.STRING,
+                description: "La categoria del prodotto (es. Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro).",
+              },
+            },
+            required: ["name", "quantity", "unit"],
+          },
+        },
+      },
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Nessuna risposta da Gemini");
+    
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Errore durante l'analisi dell'audio:", error);
+    throw error;
   }
 }
 
 export async function generateRecipeImage(title: string, ingredients: string[]): Promise<string | null> {
   try {
-    const aiImage = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const prompt = `Un piatto invitante e delizioso: ${title}. Ingredienti principali: ${ingredients.join(', ')}. Fotografia food photography professionale, illuminazione naturale, alta qualità, appetitoso, impiattamento elegante.`;
     
-    const response = await aiImage.models.generateContent({
-      model: 'gemini-3.1-flash-image-preview',
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
       contents: {
         parts: [
           {
             text: prompt,
           },
         ],
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "16:9",
-          imageSize: "1K"
-        }
       },
     });
 
@@ -112,11 +147,14 @@ export async function generateRecipe(
   servings: number,
   mealType: 'colazione' | 'pranzo' | 'cena' | 'spuntino',
   appliances: { microwave: boolean; airFryer: boolean },
-  userPreferences?: string
+  userPreferences?: string,
+  generateImage: boolean = false
 ): Promise<GeneratedRecipe> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    
     const productsList = products
-      .map((p) => `- ID: ${p.id} | ${p.name} | Quantità: ${p.quantity} ${p.unit} | Scade: ${p.expirationDate}`)
+      .map((p: any) => `- ID: ${p.id} | ${p.name} | Quantità: ${p.quantity} ${p.unit} | Scade: ${p.expirationDate}`)
       .join("\n");
 
     let mealContext = "";
@@ -171,7 +209,7 @@ Restituisci la ricetta come oggetto JSON con la seguente struttura:
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -211,21 +249,22 @@ Restituisci la ricetta come oggetto JSON con la seguente struttura:
     const text = response.text;
     if (!text) throw new Error("Nessuna risposta da Gemini");
 
-    const recipeData = JSON.parse(text) as GeneratedRecipe;
+    const recipeData = JSON.parse(text);
     
-    // Generate image for the recipe
-    try {
-      const imageUrl = await generateRecipeImage(recipeData.title, recipeData.ingredients);
-      if (imageUrl) {
-        recipeData.imageUrl = imageUrl;
+    if (generateImage) {
+      try {
+        const imageUrl = await generateRecipeImage(recipeData.title, recipeData.ingredients);
+        if (imageUrl) {
+          recipeData.imageUrl = imageUrl;
+        }
+      } catch (imageError) {
+        console.error("Failed to generate image, continuing without it", imageError);
       }
-    } catch (imageError) {
-      console.error("Failed to generate image, continuing without it", imageError);
     }
-
+    
     return recipeData;
   } catch (error) {
     console.error("Errore durante la generazione della ricetta:", error);
-    throw new Error("Impossibile generare la ricetta. Riprova.");
+    throw error;
   }
 }

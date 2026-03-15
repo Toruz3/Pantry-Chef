@@ -1,9 +1,13 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { ExtractedProduct, AudioExtractedProduct, GeneratedRecipe, Category } from "../types";
 
+const getApiKey = () => {
+  return (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+};
+
 export async function categorizeProduct(productName: string): Promise<Category> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Classifica questo prodotto alimentare: "${productName}". Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Restituisci SOLO la categoria esatta come stringa JSON.`,
@@ -34,7 +38,7 @@ export async function categorizeProduct(productName: string): Promise<Category> 
 
 export async function analyzeProductImage(base64Image: string, mimeType: string): Promise<ExtractedProduct> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -85,7 +89,7 @@ export async function analyzeProductImage(base64Image: string, mimeType: string)
 
 export async function transcribeAudio(base64Audio: string, mimeType: string): Promise<string> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -115,7 +119,7 @@ export async function transcribeAudio(base64Audio: string, mimeType: string): Pr
 
 export async function analyzeAudioProducts(base64Audio: string, mimeType: string): Promise<AudioExtractedProduct[]> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -177,11 +181,11 @@ export async function analyzeAudioProducts(base64Audio: string, mimeType: string
 
 export async function generateRecipeImage(title: string, ingredients: string[]): Promise<string | null> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const prompt = `Un piatto invitante e delizioso: ${title}. Ingredienti principali: ${ingredients.join(', ')}. Fotografia food photography professionale, illuminazione naturale, alta qualità, appetitoso, impiattamento elegante.`;
     
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3-flash-preview',
       contents: {
         parts: [
           {
@@ -212,7 +216,7 @@ export async function generateRecipe(
   generateImage: boolean = false
 ): Promise<GeneratedRecipe> {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
     
     const productsList = products
       .map((p: any) => `- ID: ${p.id} | ${p.name} | Quantità: ${p.quantity} ${p.unit} | Scade: ${p.expirationDate}`)

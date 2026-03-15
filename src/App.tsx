@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format, parseISO, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import {
-  Plus, Loader2, Package, Utensils, X, Check, Mic, Square, Barcode
+  Plus, Loader2, Package, Utensils, X, Check, Mic, Square, Barcode, AlertCircle
 } from 'lucide-react';
 import { analyzeAudioProducts } from './services/gemini';
 import { cn } from './lib/utils';
@@ -69,7 +69,6 @@ export default function App() {
     handleGenerateRecipe, handleConfirmRecipe, handleEditedQuantityChange,
   } = useRecipe(setProducts);
 
-  // Guard: check pantry is non-empty before opening the preferences modal.
   const handleOpenPreferences = (mealType: 'colazione' | 'pranzo' | 'cena' | 'spuntino') => {
     if (products.length === 0) {
       toast.error('Per favore, aggiungi prima qualche prodotto.');
@@ -97,6 +96,8 @@ export default function App() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [isAnalyzingAudio, setIsAnalyzingAudio] = useState(false);
   const [audioParsedProducts, setAudioParsedProducts] = useState<AudioExtractedProduct[] | null>(null);
+  // Track which audio product indices have a missing date (after failed confirm attempt)
+  const [missingDateIndices, setMissingDateIndices] = useState<Set<number>>(new Set());
 
   // ─── Barcode scanning ──────────────────────────────────────────────────────
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
@@ -176,8 +177,12 @@ export default function App() {
       });
 
       const extracted = await analyzeAudioProducts(base64, audioBlob.type);
-      if (extracted?.length > 0) setAudioParsedProducts(extracted);
-      else toast.error("Non sono riuscito a trovare prodotti nell'audio. Riprova.");
+      if (extracted?.length > 0) {
+        setAudioParsedProducts(extracted);
+        setMissingDateIndices(new Set());
+      } else {
+        toast.error("Non sono riuscito a trovare prodotti nell'audio. Riprova.");
+      }
     } catch (err: any) {
       toast.error(err.message || "Errore durante l'analisi dell'audio.");
     } finally {
@@ -187,10 +192,30 @@ export default function App() {
 
   const handleConfirmAudioProducts = () => {
     if (!audioParsedProducts) return;
+
+    // Trova tutti i prodotti senza data di scadenza
+    const missing = new Set<number>();
+    audioParsedProducts.forEach((p, i) => {
+      if (!p.expirationDate || p.expirationDate.trim() === '') {
+        missing.add(i);
+      }
+    });
+
+    if (missing.size > 0) {
+      setMissingDateIndices(missing);
+      toast.error(
+        missing.size === 1
+          ? '1 prodotto è senza data di scadenza. Compilala prima di procedere.'
+          : `${missing.size} prodotti sono senza data di scadenza. Compilale prima di procedere.`
+      );
+      return;
+    }
+
+    // Tutto ok, aggiungi i prodotti
     const newProducts: Product[] = audioParsedProducts.map(p => ({
       id: uuidv4(),
       name: p.name,
-      expirationDate: p.expirationDate || format(new Date(), 'yyyy-MM-dd', { locale: it }),
+      expirationDate: p.expirationDate!,
       quantity: p.quantity || 1,
       unit: p.unit || 'pz',
       category: p.category && CATEGORIES.includes(p.category as Category) ? p.category : 'Altro',
@@ -198,6 +223,7 @@ export default function App() {
     }));
     setProducts(prev => [...prev, ...newProducts]);
     setAudioParsedProducts(null);
+    setMissingDateIndices(new Set());
     toast.success('Prodotti aggiunti con successo!');
   };
 
@@ -206,12 +232,25 @@ export default function App() {
     const updated = [...audioParsedProducts];
     updated[index] = { ...updated[index], [field]: value };
     setAudioParsedProducts(updated);
+    // Se l'utente ha compilato la data, rimuovi dal set degli errori
+    if (field === 'expirationDate' && value) {
+      setMissingDateIndices(prev => {
+        const next = new Set(prev);
+        next.delete(index);
+        return next;
+      });
+    }
   };
 
   const handleRemoveAudioProduct = (index: number) => {
     if (!audioParsedProducts) return;
     const updated = audioParsedProducts.filter((_, i) => i !== index);
     setAudioParsedProducts(updated.length > 0 ? updated : null);
+    setMissingDateIndices(prev => {
+      const next = new Set<number>();
+      prev.forEach(i => { if (i < index) next.add(i); else if (i > index) next.add(i - 1); });
+      return next;
+    });
   };
 
   // ─── Render ────────────────────────────────────────────────────────────────
@@ -221,7 +260,7 @@ export default function App() {
       <Toaster 
         position="top-center"
         toastOptions={{
-          duration: 3000,
+          duration: 3500,
           style: {
             borderRadius: '16px',
             background: '#333',
@@ -230,14 +269,10 @@ export default function App() {
             fontWeight: 500,
           },
           success: {
-            style: {
-              background: '#059669', // emerald-600
-            },
+            style: { background: '#059669' },
           },
           error: {
-            style: {
-              background: '#dc2626', // red-600
-            },
+            style: { background: '#dc2626' },
           },
         }}
       />
@@ -401,67 +436,102 @@ export default function App() {
                     className="mt-8 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm"
                   >
                     <h3 className="text-lg font-bold text-stone-900 mb-1">Prodotti Rilevati</h3>
-                    <p className="text-sm text-stone-500 mb-6">Controlla e modifica i prodotti prima di aggiungerli alla dispensa.</p>
+                    <p className="text-sm text-stone-500 mb-2">
+                      Controlla e modifica i prodotti prima di aggiungerli alla dispensa.
+                    </p>
+                    {/* Avviso data obbligatoria */}
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-700 font-medium">
+                        La data di scadenza è obbligatoria per tutti i prodotti.
+                      </p>
+                    </div>
+
                     <div className="space-y-4 mb-6">
-                      {audioParsedProducts.map((product, index) => (
-                        <div key={index} className="bg-stone-50 border border-stone-200 rounded-xl p-4 relative group">
-                          <button
-                            onClick={() => handleRemoveAudioProduct(index)}
-                            className="absolute -top-2 -right-2 bg-white border border-stone-200 text-red-500 rounded-full p-1.5 shadow-sm hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100"
+                      {audioParsedProducts.map((product, index) => {
+                        const isMissingDate = missingDateIndices.has(index);
+                        return (
+                          <div
+                            key={index}
+                            className={cn(
+                              'bg-stone-50 border rounded-xl p-4 relative group transition-colors',
+                              isMissingDate ? 'border-red-400 bg-red-50/30' : 'border-stone-200'
+                            )}
                           >
-                            <X className="w-4 h-4" />
-                          </button>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                            <div>
-                              <label className="block text-xs font-medium text-stone-500 mb-1">Nome</label>
-                              <input type="text" value={product.name}
-                                onChange={(e) => handleUpdateAudioProduct(index, 'name', e.target.value)}
-                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                              />
+                            <button
+                              onClick={() => handleRemoveAudioProduct(index)}
+                              className="absolute -top-2 -right-2 bg-white border border-stone-200 text-red-500 rounded-full p-1.5 shadow-sm hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                              <div>
+                                <label className="block text-xs font-medium text-stone-500 mb-1">Nome</label>
+                                <input type="text" value={product.name}
+                                  onChange={(e) => handleUpdateAudioProduct(index, 'name', e.target.value)}
+                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-stone-500 mb-1">Categoria</label>
+                                <select value={product.category || 'Altro'}
+                                  onChange={(e) => handleUpdateAudioProduct(index, 'category', e.target.value)}
+                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
+                                >
+                                  {CATEGORIES.map(cat => <option key={cat} value={cat}>{CATEGORY_EMOJIS[cat]} {cat}</option>)}
+                                </select>
+                              </div>
                             </div>
-                            <div>
-                              <label className="block text-xs font-medium text-stone-500 mb-1">Categoria</label>
-                              <select value={product.category || 'Altro'}
-                                onChange={(e) => handleUpdateAudioProduct(index, 'category', e.target.value)}
-                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
-                              >
-                                {CATEGORIES.map(cat => <option key={cat} value={cat}>{CATEGORY_EMOJIS[cat]} {cat}</option>)}
-                              </select>
+                            <div className="flex gap-3">
+                              <div className="flex-1">
+                                <label className="block text-xs font-medium text-stone-500 mb-1">Quantità</label>
+                                <input type="number" min="0.1" step="0.1" value={product.quantity}
+                                  onChange={(e) => handleUpdateAudioProduct(index, 'quantity', e.target.value ? Number(e.target.value) : '')}
+                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                />
+                              </div>
+                              <div className="w-1/3">
+                                <label className="block text-xs font-medium text-stone-500 mb-1">Unità</label>
+                                <select value={product.unit}
+                                  onChange={(e) => handleUpdateAudioProduct(index, 'unit', e.target.value)}
+                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
+                                >
+                                  {PRODUCT_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+                                </select>
+                              </div>
+                              <div className="flex-1">
+                                <label className={cn(
+                                  'block text-xs font-medium mb-1',
+                                  isMissingDate ? 'text-red-600' : 'text-stone-500'
+                                )}>
+                                  Scadenza {isMissingDate && <span className="font-bold">*obbligatoria</span>}
+                                </label>
+                                <input
+                                  type="date"
+                                  value={product.expirationDate || ''}
+                                  onChange={(e) => handleUpdateAudioProduct(index, 'expirationDate', e.target.value)}
+                                  className={cn(
+                                    'w-full bg-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-sm border',
+                                    isMissingDate
+                                      ? 'border-red-400 focus:ring-red-400 bg-red-50'
+                                      : 'border-stone-200 focus:ring-emerald-500'
+                                  )}
+                                />
+                              </div>
                             </div>
                           </div>
-                          <div className="flex gap-3">
-                            <div className="flex-1">
-                              <label className="block text-xs font-medium text-stone-500 mb-1">Quantità</label>
-                              <input type="number" min="0.1" step="0.1" value={product.quantity}
-                                onChange={(e) => handleUpdateAudioProduct(index, 'quantity', e.target.value ? Number(e.target.value) : '')}
-                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                              />
-                            </div>
-                            <div className="w-1/3">
-                              <label className="block text-xs font-medium text-stone-500 mb-1">Unità</label>
-                              <select value={product.unit}
-                                onChange={(e) => handleUpdateAudioProduct(index, 'unit', e.target.value)}
-                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
-                              >
-                                {PRODUCT_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                              </select>
-                            </div>
-                            <div className="flex-1">
-                              <label className="block text-xs font-medium text-stone-500 mb-1">Scadenza</label>
-                              <input type="date" value={product.expirationDate || ''}
-                                onChange={(e) => handleUpdateAudioProduct(index, 'expirationDate', e.target.value)}
-                                className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <div className="flex gap-3">
-                      <button onClick={() => setAudioParsedProducts(null)}
+                      <button
+                        onClick={() => { setAudioParsedProducts(null); setMissingDateIndices(new Set()); }}
                         className="flex-1 py-3 px-4 text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
-                      >Annulla</button>
-                      <button onClick={handleConfirmAudioProducts}
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        onClick={handleConfirmAudioProducts}
                         className="flex-[2] py-3 px-4 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
                       >
                         <Check className="w-5 h-5" />

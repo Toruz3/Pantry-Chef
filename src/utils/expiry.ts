@@ -1,7 +1,29 @@
-import { differenceInDays, parseISO } from 'date-fns';
+import { differenceInDays, parseISO, isValid } from 'date-fns';
 
 export function getExpiryInfo(dateString: string) {
-  const days = differenceInDays(parseISO(dateString), new Date());
+  if (!dateString) {
+    return {
+      days: 0,
+      colorClass: 'text-stone-500 bg-stone-50 border-stone-200',
+      borderClass: 'border-l-stone-400',
+      text: 'Data non disponibile',
+    };
+  }
+
+  let parsed: Date;
+  try {
+    parsed = parseISO(dateString);
+    if (!isValid(parsed)) throw new Error();
+  } catch {
+    return {
+      days: 0,
+      colorClass: 'text-stone-500 bg-stone-50 border-stone-200',
+      borderClass: 'border-l-stone-400',
+      text: 'Data non valida',
+    };
+  }
+
+  const days = differenceInDays(parsed, new Date());
 
   let colorClass  = '';
   let borderClass = '';

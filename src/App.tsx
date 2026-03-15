@@ -140,9 +140,7 @@ export default function App() {
         : MediaRecorder.isTypeSupported('audio/mp4')
           ? 'audio/mp4'
           : 'audio/ogg';
-
-      toast.success(`Formato audio: ${mimeType}`);
-
+      
       const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };

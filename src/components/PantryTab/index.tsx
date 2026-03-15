@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpDown, Trash2, Package } from 'lucide-react';
-import { Product, CATEGORIES } from '../../types';
+import { ArrowUpDown, Trash2, Package, AlertTriangle, Clock, CheckCircle } from 'lucide-react';
+import { differenceInDays, parseISO } from 'date-fns';
+import { Product, CATEGORIES, CATEGORY_EMOJIS } from '../../types';
 import { SortOption, SORT_OPTIONS } from '../../constants/sortOptions';
 import { ProductCard } from './ProductCard';
+import { cn } from '../../lib/utils';
 
 interface EditState {
   name: string;
@@ -34,19 +36,19 @@ interface PantryTabProps {
 }
 
 export function PantryTab({
-  products,
-  groupedProducts,
-  sortBy,
-  setSortBy,
-  setShowClearConfirm,
-  setActiveTab,
-  editingProductId,
-  editState,
-  handleEditProduct,
-  handleSaveEdit,
-  handleCancelEdit,
-  handleDeleteProduct
+  products, groupedProducts, sortBy, setSortBy,
+  setShowClearConfirm, setActiveTab,
+  editingProductId, editState,
+  handleEditProduct, handleSaveEdit, handleCancelEdit, handleDeleteProduct,
 }: PantryTabProps) {
+
+  const stats = useMemo(() => {
+    const expired   = products.filter(p => differenceInDays(parseISO(p.expirationDate), new Date()) < 0).length;
+    const soon      = products.filter(p => { const d = differenceInDays(parseISO(p.expirationDate), new Date()); return d >= 0 && d <= 7; }).length;
+    const ok        = products.length - expired - soon;
+    return { expired, soon, ok };
+  }, [products]);
+
   return (
     <motion.div
       key="pantry"
@@ -62,63 +64,137 @@ export function PantryTab({
           <h2 className="text-2xl font-bold text-stone-900">La Tua Dispensa</h2>
           <p className="text-stone-500 mt-1">Gestisci i tuoi ingredienti e le loro scadenze</p>
         </div>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-          <div className="flex flex-wrap items-center justify-between w-full gap-3">
-            {products.length > 0 && (
-              <div className="flex items-center gap-3 flex-1">
-                <div className="relative flex-1 min-w-[150px]">
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as SortOption)}
-                    className="w-full appearance-none bg-white border border-stone-200 text-stone-700 py-2 pl-4 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium shadow-sm"
-                  >
-                    {SORT_OPTIONS.map(option => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <ArrowUpDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none" />
-                </div>
-                <button
-                  onClick={() => setShowClearConfirm(true)}
-                  className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex items-center justify-center border border-red-100 shrink-0"
-                  title="Svuota dispensa"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+
+        {/* Statistiche rapide */}
+        {products.length > 0 && (
+          <div className="flex items-stretch gap-2 mb-6">
+            <div className={cn(
+              'flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl transition-colors border',
+              stats.expired > 0 ? 'bg-red-50 border-red-100' : 'bg-stone-50/50 border-stone-200/50'
+            )}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <AlertTriangle className={cn("w-3.5 h-3.5", stats.expired > 0 ? "text-red-500" : "text-stone-400")} />
+                <span className={cn('text-[10px] font-bold uppercase tracking-wider', stats.expired > 0 ? 'text-red-600' : 'text-stone-500')}>
+                  Scaduti
+                </span>
               </div>
-            )}
-            <span className="text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl whitespace-nowrap shrink-0">
-              {products.length} {products.length === 1 ? 'prodotto' : 'prodotti'}
-            </span>
+              <p className={cn('text-xl font-bold leading-none', stats.expired > 0 ? 'text-red-600' : 'text-stone-400')}>
+                {stats.expired}
+              </p>
+            </div>
+
+            <div className={cn(
+              'flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl transition-colors border',
+              stats.soon > 0 ? 'bg-amber-50 border-amber-100' : 'bg-stone-50/50 border-stone-200/50'
+            )}>
+              <div className="flex items-center gap-1 mb-1.5">
+                <Clock className={cn("w-3.5 h-3.5", stats.soon > 0 ? "text-amber-500" : "text-stone-400")} />
+                <span className={cn('text-[10px] font-bold uppercase tracking-wider', stats.soon > 0 ? 'text-amber-600' : 'text-stone-500')}>
+                  In scadenza
+                </span>
+              </div>
+              <p className={cn('text-xl font-bold leading-none', stats.soon > 0 ? 'text-amber-600' : 'text-stone-400')}>
+                {stats.soon}
+              </p>
+            </div>
+
+            <div className="flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-emerald-50 border border-emerald-100 transition-colors">
+              <div className="flex items-center gap-1 mb-1.5">
+                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                  Freschi
+                </span>
+              </div>
+              <p className="text-xl font-bold leading-none text-emerald-600">
+                {stats.ok}
+              </p>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Toolbar */}
+        {products.length > 0 && (
+          <div className="flex flex-col gap-3 mb-6">
+            <div className="flex items-center justify-between px-1">
+              <h3 className="text-sm font-bold text-stone-800">
+                {products.length} {products.length === 1 ? 'prodotto' : 'prodotti'}
+              </h3>
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="text-red-600 hover:bg-red-50 flex items-center gap-1.5 text-xs font-semibold active:scale-95 transition-colors px-2.5 py-1.5 rounded-lg"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Svuota tutto</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 hide-scrollbar">
+              {SORT_OPTIONS.map(o => (
+                <button
+                  key={o.value}
+                  onClick={() => setSortBy(o.value as SortOption)}
+                  className={cn(
+                    "px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap border active:scale-95",
+                    sortBy === o.value 
+                      ? "bg-stone-900 text-white border-stone-900 shadow-md shadow-stone-900/20" 
+                      : "bg-white text-stone-600 border-stone-200 hover:bg-stone-50 shadow-sm"
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {products.length === 0 ? (
-          <div className="text-center py-16 text-stone-500 border-2 border-dashed border-stone-200 rounded-2xl bg-stone-50/50">
-            <Package className="w-12 h-12 mx-auto mb-3 text-stone-300" />
-            <p className="text-stone-900 font-medium text-lg">La dispensa è vuota</p>
-            <p className="text-sm mt-1 max-w-sm mx-auto">
-              Vai alla sezione "Aggiungi" per inserire i tuoi primi prodotti.
+          <div className="text-center py-16 px-4 text-stone-500 border-2 border-dashed border-stone-200 rounded-2xl bg-stone-50/50 flex flex-col items-center justify-center">
+            <div className="relative w-32 h-32 mb-6">
+              <svg viewBox="0 0 100 100" className="w-full h-full text-stone-300" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                {/* Bag body */}
+                <rect x="25" y="35" width="50" height="55" rx="4" fill="#f5f5f4" />
+                {/* Bag handles */}
+                <path d="M35 35 C35 15, 65 15, 65 35" />
+                {/* Details */}
+                <line x1="40" y1="35" x2="40" y2="45" strokeWidth="2" strokeOpacity="0.5" />
+                <line x1="60" y1="35" x2="60" y2="45" strokeWidth="2" strokeOpacity="0.5" />
+              </svg>
+              <motion.div 
+                animate={{ y: [0, -5, 0] }} 
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="absolute -top-2 -right-2 text-3xl"
+              >
+                🛒
+              </motion.div>
+            </div>
+            <p className="text-stone-900 font-bold text-xl mb-2">La tua dispensa è vuota!</p>
+            <p className="text-sm max-w-xs mx-auto text-stone-500 mb-8">
+              La dispensa è vuota. Aggiungi degli ingredienti per iniziare a cucinare senza sprechi.
             </p>
-            <button 
+            <button
               onClick={() => setActiveTab('add')}
-              className="mt-6 bg-white border border-stone-200 text-stone-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-stone-50 transition-colors"
+              className="bg-emerald-600 text-white px-6 py-3 rounded-xl text-sm font-bold hover:bg-emerald-700 active:bg-emerald-800 transition-colors shadow-sm shadow-emerald-600/20"
             >
-              Aggiungi Prodotto
+              Aggiungi un prodotto
             </button>
           </div>
         ) : (
           <div className="space-y-8">
             {CATEGORIES.map(category => {
               const categoryProducts = groupedProducts[category];
-              if (categoryProducts.length === 0) return null;
-              
+              if (!categoryProducts || categoryProducts.length === 0) return null;
               return (
                 <div key={category} className="space-y-3">
-                  <h3 className="text-lg font-bold text-stone-900 px-1 border-b border-stone-200 pb-2">{category}</h3>
+                  <div className="sticky top-0 sm:top-16 z-20 flex items-center gap-2 py-3 bg-stone-50 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                    <span className="text-xl" aria-hidden="true">{CATEGORY_EMOJIS[category]}</span>
+                    <h3 className="text-base font-bold text-stone-800">{category}</h3>
+                    <span className="text-xs font-semibold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">
+                      {categoryProducts.length}
+                    </span>
+                  </div>
                   <ul className="space-y-3">
                     <AnimatePresence>
-                      {categoryProducts.map((product) => (
+                      {categoryProducts.map(product => (
                         <ProductCard
                           key={product.id}
                           product={product}

@@ -1,5 +1,36 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { ExtractedProduct, AudioExtractedProduct, GeneratedRecipe } from "../types";
+import { ExtractedProduct, AudioExtractedProduct, GeneratedRecipe, Category } from "../types";
+
+export async function categorizeProduct(productName: string): Promise<Category> {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Classifica questo prodotto alimentare: "${productName}". Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Restituisci SOLO la categoria esatta come stringa JSON.`,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            category: {
+              type: Type.STRING,
+              description: "La categoria del prodotto (es. Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro).",
+            },
+          },
+          required: ["category"],
+        },
+      },
+    });
+
+    if (!response.text) return "Altro";
+    
+    const result = JSON.parse(response.text);
+    return (result.category as Category) || "Altro";
+  } catch (error) {
+    console.error("Errore durante la categorizzazione del prodotto:", error);
+    return "Altro";
+  }
+}
 
 export async function analyzeProductImage(base64Image: string, mimeType: string): Promise<ExtractedProduct> {
   try {
@@ -48,6 +79,36 @@ export async function analyzeProductImage(base64Image: string, mimeType: string)
     return JSON.parse(text);
   } catch (error) {
     console.error("Errore durante l'analisi dell'immagine:", error);
+    throw error;
+  }
+}
+
+export async function transcribeAudio(base64Audio: string, mimeType: string): Promise<string> {
+  try {
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Audio.split(',')[1] || base64Audio,
+              mimeType: mimeType,
+            },
+          },
+          {
+            text: "Trascrivi esattamente ciò che viene detto in questo audio. Non aggiungere commenti, rispondi solo con la trascrizione del testo.",
+          },
+        ],
+      },
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Nessuna risposta da Gemini");
+    
+    return text.trim();
+  } catch (error) {
+    console.error("Errore durante la trascrizione dell'audio:", error);
     throw error;
   }
 }

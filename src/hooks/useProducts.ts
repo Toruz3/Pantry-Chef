@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { Product, Category, CATEGORIES } from '../types';
 import { SortOption } from '../constants/sortOptions';
 import { PRODUCT_UNITS } from '../constants/units';
+import { categorizeProduct } from '../services/gemini';
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>(() => {
@@ -39,6 +40,7 @@ export function useProducts() {
   const [newProductQuantity, setNewProductQuantity] = useState<number | ''>('');
   const [newProductUnit, setNewProductUnit] = useState('g');
   const [newProductCategory, setNewProductCategory] = useState<string>('Altro');
+  const [isCategorizing, setIsCategorizing] = useState(false);
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editProductName, setEditProductName] = useState('');
@@ -89,7 +91,7 @@ export function useProducts() {
     return groups;
   }, [sortedProducts]);
 
-  const handleAddProduct = (e?: React.FormEvent, onSuccess?: () => void, onError?: (msg: string) => void) => {
+  const handleAddProduct = async (e?: React.FormEvent, onSuccess?: () => void, onError?: (msg: string) => void) => {
     if (e) e.preventDefault();
     
     const trimmedName = newProductName.trim();
@@ -121,23 +123,32 @@ export function useProducts() {
       return;
     }
 
-    const newProduct: Product = {
-      id: uuidv4(),
-      name: trimmedName,
-      expirationDate: newProductDate,
-      quantity: Number(newProductQuantity),
-      unit: newProductUnit,
-      category: newProductCategory,
-      createdAt: Date.now(),
-    };
+    setIsCategorizing(true);
+    try {
+      const category = await categorizeProduct(trimmedName);
 
-    setProducts((prev) => [...prev, newProduct]);
-    setNewProductName('');
-    setNewProductDate('');
-    setNewProductQuantity('');
-    setNewProductUnit('g');
-    setNewProductCategory('Altro');
-    if (onSuccess) onSuccess();
+      const newProduct: Product = {
+        id: uuidv4(),
+        name: trimmedName,
+        expirationDate: newProductDate,
+        quantity: Number(newProductQuantity),
+        unit: newProductUnit,
+        category: category,
+        createdAt: Date.now(),
+      };
+
+      setProducts((prev) => [...prev, newProduct]);
+      setNewProductName('');
+      setNewProductDate('');
+      setNewProductQuantity('');
+      setNewProductUnit('g');
+      setNewProductCategory('Altro');
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      if (onError) onError("Errore durante la categorizzazione automatica.");
+    } finally {
+      setIsCategorizing(false);
+    }
   };
 
   const handleDeleteProduct = (id: string) => {
@@ -190,6 +201,7 @@ export function useProducts() {
     setNewProductUnit,
     newProductCategory,
     setNewProductCategory,
+    isCategorizing,
     editingProductId,
     editProductName,
     setEditProductName,

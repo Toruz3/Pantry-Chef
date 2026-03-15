@@ -52,3 +52,14 @@ export const CATEGORIES = [
 ] as const;
 
 export type Category = typeof CATEGORIES[number];
+
+export const CATEGORY_EMOJIS: Record<Category, string> = {
+  'Latticini': '🧀',
+  'Carne e Pesce': '🥩',
+  'Frutta e Verdura': '🥗',
+  'Dispensa Secca': '🍝',
+  'Surgelati': '❄️',
+  'Bevande': '🧃',
+  'Snack e Dolci': '🍪',
+  'Altro': '📦'
+};

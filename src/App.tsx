@@ -461,22 +461,20 @@ export default function App() {
                 )}
 
                 {/* Dev test button */}
-                {import.meta.env.DEV && (
-                  <div className="mt-8 pt-6 border-t border-stone-200">
-                    <button type="button"
-                      onClick={() => addRandomProducts(setProducts, () => {
-                        toast.success('Prodotti di test aggiunti!');
-                      })}
-                      className="w-full bg-amber-100 text-amber-800 border border-amber-300 px-4 py-3 rounded-xl font-medium hover:bg-amber-200 active:bg-amber-300 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      <Package className="w-5 h-5" />
-                      TEST: Aggiungi 10–15 Prodotti Casuali
-                    </button>
-                    <p className="text-xs text-amber-600/80 text-center mt-2">
-                      Questo tasto è temporaneo e serve solo per testare la dispensa.
-                    </p>
-                  </div>
-                )}
+                <div className="mt-8 pt-6 border-t border-stone-200">
+                  <button type="button"
+                    onClick={() => addRandomProducts(setProducts, () => {
+                      toast.success('Prodotti di test aggiunti!');
+                    })}
+                    className="w-full bg-amber-100 text-amber-800 border border-amber-300 px-4 py-3 rounded-xl font-medium hover:bg-amber-200 active:bg-amber-300 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <Package className="w-5 h-5" />
+                    Aggiungi Prodotti di Esempio
+                  </button>
+                  <p className="text-xs text-amber-600/80 text-center mt-2">
+                    Aggiunge 10–15 prodotti casuali per testare la dispensa.
+                  </p>
+                </div>
               </section>
             </motion.div>
           )}

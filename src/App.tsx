@@ -134,17 +134,20 @@ export default function App() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
       const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-  ? 'audio/webm'
-  : MediaRecorder.isTypeSupported('audio/mp4')
-    ? 'audio/mp4'
-    : 'audio/ogg';
+        ? 'audio/webm'
+        : MediaRecorder.isTypeSupported('audio/mp4')
+          ? 'audio/mp4'
+          : 'audio/ogg';
 
-const recorder = new MediaRecorder(stream, { mimeType });
+      toast.success(`Formato audio: ${mimeType}`);
+
+      const recorder = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
         await processAudio(blob);
         stream.getTracks().forEach(t => t.stop());
       };

@@ -166,16 +166,20 @@ export default function App() {
   const processAudio = async (audioBlob: Blob) => {
     setIsAnalyzingAudio(true);
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = async () => {
-        const b64 = reader.result?.toString().split(',')[1];
-        if (b64) {
-          const extracted = await analyzeAudioProducts(b64, audioBlob.type);
-          if (extracted?.length > 0) setAudioParsedProducts(extracted);
-          else toast.error("Non sono riuscito a trovare prodotti nell'audio. Riprova.");
-        }
-      };
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const b64 = reader.result?.toString().split(',')[1];
+          if (b64) resolve(b64);
+          else reject(new Error('Impossibile leggere il file audio.'));
+        };
+        reader.onerror = () => reject(new Error('Errore nella lettura del file audio.'));
+      });
+
+      const extracted = await analyzeAudioProducts(base64, audioBlob.type);
+      if (extracted?.length > 0) setAudioParsedProducts(extracted);
+      else toast.error("Non sono riuscito a trovare prodotti nell'audio. Riprova.");
     } catch (err: any) {
       toast.error(err.message || "Errore durante l'analisi dell'audio.");
     } finally {

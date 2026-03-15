@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
 import { motion, useAnimation, PanInfo } from 'motion/react';
 import { Pencil, Trash2, X, Check, Calendar } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Product, CATEGORIES, CATEGORY_EMOJIS } from '../../types';
 import { PRODUCT_UNITS } from '../../constants/units';
@@ -64,7 +64,7 @@ function ProductCardComponent({
   const { colorClass, text } = getExpiryInfo(product.expirationDate);
   const baseCard = cn(
     'overflow-hidden rounded-xl border border-stone-200 bg-white border-l-4 transition-all relative',
-    product.expirationDate < new Date().toISOString().split('T')[0]
+    product.expirationDate && product.expirationDate < new Date().toISOString().split('T')[0]
       ? 'border-l-red-500'
       : 'border-l-emerald-500'
   );
@@ -75,15 +75,12 @@ function ProductCardComponent({
   const handleDragEnd = async (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 80;
     if (info.offset.x > threshold) {
-      // Swipe right -> Edit
       onEdit(product);
       controls.start({ x: 0 });
     } else if (info.offset.x < -threshold) {
-      // Swipe left -> Delete
       onDelete(product.id);
       controls.start({ x: 0 });
     } else {
-      // Snap back
       controls.start({ x: 0 });
     }
   };
@@ -173,6 +170,11 @@ function ProductCardComponent({
   const levelPercentage = getLevelPercentage(product.quantity, product.unit);
   const levelColor = getLevelColor(levelPercentage);
 
+  const parsedDate = product.expirationDate ? parseISO(product.expirationDate) : null;
+  const formattedDate = parsedDate && isValid(parsedDate)
+    ? format(parsedDate, 'd MMM yyyy', { locale: it })
+    : 'N/D';
+
   return (
     <motion.li
       initial={{ opacity: 0, y: 8 }}
@@ -220,8 +222,8 @@ function ProductCardComponent({
               {product.quantity} {product.unit}
             </p>
             <div className="w-full bg-stone-100 rounded-full h-1.5 overflow-hidden">
-              <div 
-                className={cn('h-full rounded-full transition-all duration-500', levelColor)} 
+              <div
+                className={cn('h-full rounded-full transition-all duration-500', levelColor)}
                 style={{ width: `${levelPercentage}%` }}
               />
             </div>
@@ -231,7 +233,7 @@ function ProductCardComponent({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="flex items-center gap-1 text-xs text-stone-400">
               <Calendar className="w-3 h-3" />
-              {format(parseISO(product.expirationDate), 'd MMM yyyy', { locale: it })}
+              {formattedDate}
             </span>
             {product.category && (
               <span className="text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">

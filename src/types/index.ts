@@ -7,6 +7,7 @@ export interface Product {
   category?: string;
   createdAt?: number;
   imageUrl?: string;
+  isEstimate?: boolean;
 }
 
 export interface ExtractedProduct {
@@ -17,10 +18,19 @@ export interface ExtractedProduct {
 
 export interface AudioExtractedProduct {
   name: string;
-  quantity: number;
-  unit: string;
+  quantity: number | '';
+  unit: string | '';
   expirationDate: string | null;
   category?: string;
+  isEstimate?: boolean;
+}
+
+export interface ReceiptExtractedProduct {
+  name: string;
+  quantity: number;
+  unit: string;
+  expirationDate: string;
+  category: string;
 }
 
 export interface UsedProduct {

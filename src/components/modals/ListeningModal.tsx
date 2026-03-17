@@ -9,8 +9,6 @@ interface ListeningModalProps {
 }
 
 export function ListeningModal({ isRecording, isAnalyzingAudio, onStop }: ListeningModalProps) {
-  if (!isRecording && !isAnalyzingAudio) return null;
-
   return (
     <motion.div 
       initial={{ opacity: 0 }}

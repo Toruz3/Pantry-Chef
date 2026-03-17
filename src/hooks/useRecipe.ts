@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Product, GeneratedRecipe } from '../types';
 import { generateRecipe } from '../services/gemini';
+import { haptics } from '../utils/haptics';
 
 export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Product[]>>) {
   const [recipe, setRecipe]                 = useState<GeneratedRecipe | null>(null);
@@ -29,6 +30,7 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
   ) => {
     if (!selectedMealType) return;
 
+    haptics.medium();
     setShowPreferencesModal(false);
     setIsGenerating(true);
     setRecipe(null);
@@ -46,8 +48,10 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
       setRecipe(generated);
       setEditedUsedProducts(generated.usedProducts || []);
       setIsEditingRecipe(false);
+      haptics.success();
     } catch (err: any) {
       setError(err.message || 'Impossibile generare la ricetta.');
+      haptics.error();
     } finally {
       setIsGenerating(false);
       setSelectedMealType(null);
@@ -57,6 +61,7 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
   const handleConfirmRecipe = () => {
     if (!recipe || isRecipeConfirmed) return;
 
+    haptics.success();
     setProducts(prev => {
       const updated = [...prev];
       editedUsedProducts.forEach(usedItem => {

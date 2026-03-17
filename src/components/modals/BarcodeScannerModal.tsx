@@ -10,13 +10,11 @@ interface BarcodeScannerModalProps {
   onScan: (barcode: string) => void;
 }
 
-export function BarcodeScannerModal({ isOpen, onClose, onScan }: BarcodeScannerModalProps) {
+export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModalProps, 'isOpen'>) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [isStarting, setIsStarting] = useState(true);
 
   useEffect(() => {
-    if (!isOpen) return;
-
     let mounted = true;
     setIsStarting(true);
 
@@ -63,14 +61,16 @@ export function BarcodeScannerModal({ isOpen, onClose, onScan }: BarcodeScannerM
         scannerRef.current.stop().catch(console.error);
       }
     };
-  }, [isOpen, onScan, onClose]);
-
-  if (!isOpen) return null;
+  }, [onScan, onClose]);
 
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm">
-        <div className="flex items-center justify-between p-4 text-white">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm"
+    >
+      <div className="flex items-center justify-between p-4 text-white">
           <h3 className="text-lg font-medium flex items-center gap-2">
             <ScanLine className="w-5 h-5" />
             Scansiona Codice a Barre
@@ -100,7 +100,6 @@ export function BarcodeScannerModal({ isOpen, onClose, onScan }: BarcodeScannerM
             Inquadra il codice a barre del prodotto. La scansione avverrà automaticamente.
           </p>
         </div>
-      </div>
-    </AnimatePresence>
+    </motion.div>
   );
 }

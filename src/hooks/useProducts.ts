@@ -5,21 +5,48 @@ import { Product, Category, CATEGORIES } from '../types';
 import { SortOption } from '../constants/sortOptions';
 import { PRODUCT_UNITS } from '../constants/units';
 import { categorizeProduct } from '../services/gemini';
+import { haptics } from '../utils/haptics';
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>(() => {
+    const ensureUniqueIds = (items: any[]) => {
+      const seenIds = new Set<string>();
+      return items.map(p => {
+        let id = p.id;
+        if (!id || seenIds.has(id)) {
+          id = uuidv4();
+        }
+        seenIds.add(id);
+        return { ...p, id };
+      });
+    };
+
     const salvatiV1 = localStorage.getItem('miaDispensa_v1');
     if (salvatiV1) {
-      return JSON.parse(salvatiV1);
+      try {
+        const parsed = JSON.parse(salvatiV1);
+        if (Array.isArray(parsed)) {
+          return ensureUniqueIds(parsed);
+        }
+      } catch (e) {
+        console.error("Failed to parse miaDispensa_v1", e);
+      }
     }
     
     // Migration from old version
     const salvatiOld = localStorage.getItem('miaDispensa');
     if (salvatiOld) {
-      const parsed = JSON.parse(salvatiOld);
-      localStorage.setItem('miaDispensa_v1', salvatiOld);
-      localStorage.removeItem('miaDispensa');
-      return parsed;
+      try {
+        const parsed = JSON.parse(salvatiOld);
+        if (Array.isArray(parsed)) {
+          const uniqueParsed = ensureUniqueIds(parsed);
+          localStorage.setItem('miaDispensa_v1', JSON.stringify(uniqueParsed));
+          localStorage.removeItem('miaDispensa');
+          return uniqueParsed;
+        }
+      } catch (e) {
+        console.error("Failed to parse miaDispensa", e);
+      }
     }
     
     return [];
@@ -143,6 +170,7 @@ export function useProducts() {
       setNewProductQuantity('');
       setNewProductUnit('g');
       setNewProductCategory('Altro');
+      haptics.success();
       if (onSuccess) onSuccess();
     } catch (err) {
       if (onError) onError("Errore durante la categorizzazione automatica.");
@@ -152,6 +180,7 @@ export function useProducts() {
   };
 
   const handleDeleteProduct = (id: string) => {
+    haptics.medium();
     setProducts((prev) => prev.filter((p) => p.id !== id));
   };
 
@@ -167,9 +196,10 @@ export function useProducts() {
   const handleSaveEdit = () => {
     if (!editingProductId || !editProductName || !editProductDate || editProductQuantity === '') return;
 
+    haptics.success();
     setProducts(prev => prev.map(p => 
       p.id === editingProductId 
-        ? { ...p, name: editProductName, quantity: Number(editProductQuantity), unit: editProductUnit, expirationDate: editProductDate, category: editProductCategory }
+        ? { ...p, name: editProductName, quantity: Number(editProductQuantity), unit: editProductUnit, expirationDate: editProductDate, category: editProductCategory, isEstimate: false }
         : p
     ));
     setEditingProductId(null);
@@ -180,6 +210,7 @@ export function useProducts() {
   };
 
   const clearProducts = () => {
+    haptics.heavy();
     setProducts([]);
     setShowClearConfirm(false);
   };

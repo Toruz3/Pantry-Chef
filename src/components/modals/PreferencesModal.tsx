@@ -1,18 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { ChefHat, Users, Utensils, Loader2, Mic, Square } from 'lucide-react';
+import { ChefHat, Users, Utensils, Loader2, Mic, Square, Minus, Plus, Waves, Wind, X } from 'lucide-react';
 import { transcribeAudio } from '../../services/gemini';
 import { toast } from 'react-hot-toast';
 
 interface PreferencesModalProps {
-  isOpen: boolean;
   mealType: 'colazione' | 'pranzo' | 'cena' | 'spuntino' | null;
   isGenerating: boolean;
   onConfirm: (servings: number, useMicrowave: boolean, useAirFryer: boolean, preferences: string) => void;
   onCancel: () => void;
 }
 
-export function PreferencesModal({ isOpen, mealType, isGenerating, onConfirm, onCancel }: PreferencesModalProps) {
+export function PreferencesModal({ mealType, isGenerating, onConfirm, onCancel }: PreferencesModalProps) {
   const [servings, setServings] = useState<number>(1);
   const [useMicrowave, setUseMicrowave] = useState(false);
   const [useAirFryer, setUseAirFryer] = useState(false);
@@ -25,18 +24,16 @@ export function PreferencesModal({ isOpen, mealType, isGenerating, onConfirm, on
 
   // Reset state when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setServings(1);
-      setUseMicrowave(false);
-      setUseAirFryer(false);
-      setUserPreferences('');
-      setIsRecording(false);
-      setIsTranscribing(false);
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-      }
+    setServings(1);
+    setUseMicrowave(false);
+    setUseAirFryer(false);
+    setUserPreferences('');
+    setIsRecording(false);
+    setIsTranscribing(false);
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
     }
-  }, [isOpen]);
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -92,111 +89,137 @@ export function PreferencesModal({ isOpen, mealType, isGenerating, onConfirm, on
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm"
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl"
+        className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl overflow-hidden"
       >
-        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4 mx-auto">
-          <ChefHat className="w-6 h-6" />
+        {/* Header */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h3 className="text-2xl font-bold text-stone-900 flex items-center gap-3 capitalize">
+              <span className="text-3xl bg-emerald-50 w-12 h-12 flex items-center justify-center rounded-2xl">
+                {mealType === 'colazione' && '🥐'}
+                {mealType === 'pranzo' && '🍝'}
+                {mealType === 'cena' && '🍕'}
+                {mealType === 'spuntino' && '🥪'}
+                {!mealType && '👨‍🍳'}
+              </span>
+              {mealType || 'Ricetta'}
+            </h3>
+            <p className="text-stone-500 text-sm mt-2 font-medium">
+              Personalizza la tua ricetta.
+            </p>
+          </div>
+          <button onClick={onCancel} className="p-2 text-stone-400 hover:bg-stone-100 rounded-full transition-colors">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        <h3 className="text-xl font-bold text-center text-stone-900 mb-2">Qualche preferenza?</h3>
-        <p className="text-center text-stone-600 mb-6 text-sm">
-          Hai voglia di qualcosa in particolare? Aggiungi dei dettagli per aiutare lo Chef a creare la ricetta perfetta per te.
-        </p>
         
-        <div className="flex flex-col gap-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-stone-500" />
-              <label htmlFor="modal-servings" className="text-stone-700 font-medium">Persone:</label>
+        <div className="space-y-6">
+          {/* Persone */}
+          <div className="flex items-center justify-between py-1">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-stone-100 rounded-xl text-stone-600">
+                <Users className="w-5 h-5" />
+              </div>
+              <span className="text-stone-700 font-semibold">Persone</span>
             </div>
-            <input
-              type="number"
-              id="modal-servings"
-              min="1"
-              max="20"
-              value={servings}
-              onChange={(e) => setServings(parseInt(e.target.value) || 1)}
-              className="w-20 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-center font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
+            <div className="flex items-center gap-4 bg-stone-50 border border-stone-200 rounded-2xl p-1.5 shadow-sm">
+              <button 
+                onClick={() => setServings(Math.max(1, servings - 1))} 
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm text-stone-600 active:bg-stone-200 transition-all"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <span className="w-4 text-center font-bold text-stone-800">{servings}</span>
+              <button 
+                onClick={() => setServings(servings + 1)} 
+                className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm text-stone-600 active:bg-stone-200 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-medium text-stone-700">Elettrodomestici disponibili:</span>
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={useMicrowave}
-                  onChange={(e) => setUseMicrowave(e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 rounded border-stone-300 focus:ring-emerald-500"
-                />
-                <span className="text-sm text-stone-600">Microonde</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={useAirFryer}
-                  onChange={(e) => setUseAirFryer(e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 rounded border-stone-300 focus:ring-emerald-500"
-                />
-                <span className="text-sm text-stone-600">Friggitrice ad aria</span>
-              </label>
+          <hr className="border-stone-100" />
+
+          {/* Elettrodomestici */}
+          <div className="py-1">
+            <span className="block text-sm font-semibold text-stone-700 mb-3">Cosa vuoi usare?</span>
+            <div className="flex flex-wrap gap-3">
+              <button 
+                onClick={() => setUseMicrowave(!useMicrowave)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-sm font-semibold transition-all ${useMicrowave ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`}
+              >
+                <Waves className="w-4 h-4" /> Microonde
+              </button>
+              <button 
+                onClick={() => setUseAirFryer(!useAirFryer)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl border text-sm font-semibold transition-all ${useAirFryer ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-stone-200 bg-white text-stone-600 hover:bg-stone-50'}`}
+              >
+                <Wind className="w-4 h-4" /> Friggitrice
+              </button>
             </div>
           </div>
-        </div>
 
-        <div className="relative mb-6">
-          <textarea
-            value={userPreferences}
-            onChange={(e) => setUserPreferences(e.target.value)}
-            placeholder="Es. Vorrei qualcosa di leggero, ho voglia di piccante, non usare i latticini..."
-            className="w-full h-32 p-3 pr-12 border border-stone-200 rounded-xl bg-stone-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none text-sm"
-          />
-          <div className="absolute bottom-3 right-3 flex flex-col items-center">
-            {isTranscribing ? (
-              <div className="p-2 rounded-full bg-emerald-100 text-emerald-600">
-                <Loader2 className="w-5 h-5 animate-spin" />
-              </div>
-            ) : (
-              <button
-                onClick={isRecording ? stopRecording : startRecording}
-                className={`p-2 rounded-full transition-all shadow-sm ${
-                  isRecording 
-                    ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' 
-                    : 'bg-white text-stone-500 hover:bg-stone-100 border border-stone-200'
-                }`}
-                title={isRecording ? "Ferma registrazione" : "Dettatura vocale"}
-              >
-                {isRecording ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
-              </button>
-            )}
+          <hr className="border-stone-100" />
+
+          {/* Textarea */}
+          <div className="py-1">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-stone-700">Note o preferenze</span>
+              {isTranscribing ? (
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+              ) : (
+                <button
+                  onClick={isRecording ? stopRecording : startRecording}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
+                    isRecording 
+                      ? 'bg-red-100 text-red-600 animate-pulse' 
+                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                  }`}
+                >
+                  {isRecording ? <Square className="w-3 h-3 fill-current" /> : <Mic className="w-3 h-3" />}
+                  {isRecording ? 'In ascolto...' : 'Dettatura vocale'}
+                </button>
+              )}
+            </div>
+            <textarea
+              value={userPreferences}
+              onChange={(e) => setUserPreferences(e.target.value)}
+              placeholder="Es. Vorrei qualcosa di leggero, niente latticini..."
+              className="w-full h-24 p-4 border border-stone-200 rounded-2xl bg-stone-50 focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 resize-none text-sm transition-all"
+            />
           </div>
         </div>
 
-        <div className="flex gap-3">
+        {/* Footer */}
+        <div className="pt-6 flex gap-3 mt-2">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2.5 rounded-xl font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 transition-colors"
+            className="px-5 py-3.5 rounded-2xl font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 transition-colors"
           >
             Annulla
           </button>
           <button
             onClick={() => onConfirm(servings, useMicrowave, useAirFryer, userPreferences)}
             disabled={isGenerating || isRecording || isTranscribing}
-            className="flex-1 px-4 py-2.5 rounded-xl font-medium text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+            className="flex-1 py-3.5 rounded-2xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98]"
           >
             {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Utensils className="w-5 h-5" />}
-            Genera
+            {isGenerating ? 'Creazione...' : 'Genera Ricetta'}
           </button>
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

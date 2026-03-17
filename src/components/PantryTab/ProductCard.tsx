@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, useAnimation, PanInfo } from 'motion/react';
-import { Pencil, Trash2, X, Check, Calendar } from 'lucide-react';
+import { Pencil, Trash2, X, Check, Calendar, Sparkles } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Product, CATEGORIES, CATEGORY_EMOJIS } from '../../types';
@@ -52,7 +52,7 @@ function getLevelColor(percentage: number) {
   return 'bg-emerald-500';
 }
 
-function ProductCardComponent({
+const ProductCardComponent = React.forwardRef<HTMLLIElement, ProductCardProps>(({
   product,
   isEditing,
   editState,
@@ -60,7 +60,7 @@ function ProductCardComponent({
   onSaveEdit,
   onCancelEdit,
   onDelete,
-}: ProductCardProps) {
+}, ref) => {
   const { colorClass, text } = getExpiryInfo(product.expirationDate);
   const baseCard = cn(
     'overflow-hidden rounded-xl border border-stone-200 bg-white border-l-4 transition-all relative',
@@ -70,7 +70,6 @@ function ProductCardComponent({
   );
 
   const controls = useAnimation();
-  const dragConstraintsRef = useRef(null);
 
   const handleDragEnd = async (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 80;
@@ -88,6 +87,8 @@ function ProductCardComponent({
   if (isEditing) {
     return (
       <motion.li
+        id={`product-${product.id}`}
+        ref={ref}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -111,7 +112,7 @@ function ProductCardComponent({
                 onChange={(e) => editState.setCategory(e.target.value)}
                 className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3 py-3 sm:py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
               >
-                {CATEGORIES.map(cat => <option key={cat} value={cat}>{CATEGORY_EMOJIS[cat]} {cat}</option>)}
+                {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat} {CATEGORY_EMOJIS[cat]}</option>)}
               </select>
             </div>
           </div>
@@ -177,11 +178,12 @@ function ProductCardComponent({
 
   return (
     <motion.li
+      id={`product-${product.id}`}
+      ref={ref}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       className="relative overflow-hidden rounded-xl mb-3"
-      ref={dragConstraintsRef}
     >
       {/* Background Actions */}
       <div className="absolute inset-0 flex items-center justify-between px-4 rounded-xl font-medium text-sm">
@@ -205,9 +207,16 @@ function ProductCardComponent({
         <div className="p-4">
           {/* Nome + badge scadenza */}
           <div className="flex items-start justify-between gap-3 mb-1.5">
-            <p className="font-semibold text-stone-900 text-base leading-snug flex-1 min-w-0 truncate">
-              {product.name}
-            </p>
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <p className="font-semibold text-stone-900 text-base leading-snug truncate">
+                {product.name}
+              </p>
+              {product.isEstimate && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider shrink-0" title="Dati stimati dall'AI. Modifica per confermare.">
+                  <Sparkles className="w-3 h-3" /> Stima
+                </span>
+              )}
+            </div>
             <span className={cn(
               'text-xs px-2.5 py-1 rounded-full border font-semibold whitespace-nowrap shrink-0 mt-0.5',
               colorClass,
@@ -229,23 +238,17 @@ function ProductCardComponent({
             </div>
           </div>
 
-          {/* Data + categoria */}
+          {/* Data */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="flex items-center gap-1 text-xs text-stone-400">
               <Calendar className="w-3 h-3" />
               {formattedDate}
             </span>
-            {product.category && (
-              <span className="text-xs bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-                <span aria-hidden="true">{CATEGORY_EMOJIS[product.category]}</span>
-                {product.category}
-              </span>
-            )}
           </div>
         </div>
       </motion.div>
     </motion.li>
   );
-}
+});
 
 export const ProductCard = React.memo(ProductCardComponent);

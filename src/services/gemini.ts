@@ -1,9 +1,71 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { ExtractedProduct, AudioExtractedProduct, GeneratedRecipe, Category } from "../types";
+import { ExtractedProduct, AudioExtractedProduct, GeneratedRecipe, Category, ReceiptExtractedProduct } from "../types";
 
 const getApiKey = () => {
   return (import.meta as any).env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
 };
+
+export async function processReceiptImage(base64Image: string, mimeType: string): Promise<ReceiptExtractedProduct[]> {
+  try {
+    const ai = new GoogleGenAI({ apiKey: getApiKey() });
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Image.split(',')[1] || base64Image,
+              mimeType: mimeType,
+            },
+          },
+          {
+            text: "Analizza questo scontrino. Estrai tutti i prodotti alimentari presenti. Per ogni prodotto, se non ci sono quantità o scadenze esplicite, fai una stima ottimistica e realistica (es. pasta 500g scadenza tra 1 anno, latte 1l scadenza tra 1 settimana, uova 6pz scadenza tra 2 settimane). Restituisci un array JSON con oggetti contenenti: name (nome pulito in italiano), quantity (numero), unit (g, kg, ml, l, pz, scatolette, confezioni), expirationDate (YYYY-MM-DD), category ('Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro').",
+          },
+        ],
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: {
+                type: Type.STRING,
+                description: "Il nome del prodotto alimentare in italiano (pulito dalle abbreviazioni dello scontrino).",
+              },
+              quantity: {
+                type: Type.NUMBER,
+                description: "La quantità stimata o letta.",
+              },
+              unit: {
+                type: Type.STRING,
+                description: "L'unità di misura (es. g, kg, ml, l, pz, scatolette, confezioni).",
+              },
+              expirationDate: {
+                type: Type.STRING,
+                description: "La data di scadenza stimata o letta nel formato YYYY-MM-DD.",
+              },
+              category: {
+                type: Type.STRING,
+                description: "La categoria del prodotto (es. Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro).",
+              },
+            },
+            required: ["name", "quantity", "unit", "expirationDate", "category"],
+          },
+        },
+      },
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Nessuna risposta da Gemini");
+    
+    return JSON.parse(text);
+  } catch (error) {
+    console.error("Errore durante l'analisi dello scontrino:", error);
+    throw error;
+  }
+}
 
 export async function categorizeProduct(productName: string): Promise<Category> {
   try {
@@ -131,7 +193,7 @@ export async function analyzeAudioProducts(base64Audio: string, mimeType: string
             },
           },
           {
-            text: "Analizza questo audio in cui l'utente elenca dei prodotti da aggiungere alla dispensa. Estrai una lista di prodotti con nome, quantità, unità di misura (g, kg, ml, l, pz, scatolette, confezioni), data di scadenza (formato YYYY-MM-DD) e categoria. Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Se la data di scadenza non è specificata o non è chiara, restituisci null per quel campo. Se la quantità non è specificata, usa 1. Se l'unità non è specificata, usa 'pz'. Restituisci il risultato come array JSON.",
+            text: "Analizza questo audio in cui l'utente elenca dei prodotti da aggiungere alla dispensa. Estrai una lista di prodotti con nome, quantità, unità di misura (g, kg, ml, l, pz, scatolette, confezioni), data di scadenza (formato YYYY-MM-DD) e categoria. Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Se la data di scadenza non è specificata o non è chiara, restituisci null per quel campo. Se la quantità non è specificata, restituisci null. Se l'unità non è specificata, restituisci null. Restituisci il risultato come array JSON.",
           },
         ],
       },
@@ -148,11 +210,13 @@ export async function analyzeAudioProducts(base64Audio: string, mimeType: string
               },
               quantity: {
                 type: Type.NUMBER,
-                description: "La quantità del prodotto.",
+                description: "La quantità del prodotto. Null se non specificata.",
+                nullable: true,
               },
               unit: {
                 type: Type.STRING,
-                description: "L'unità di misura (g, kg, ml, l, pz, scatolette, confezioni).",
+                description: "L'unità di misura (g, kg, ml, l, pz, scatolette, confezioni). Null se non specificata.",
+                nullable: true,
               },
               expirationDate: {
                 type: Type.STRING,
@@ -172,7 +236,12 @@ export async function analyzeAudioProducts(base64Audio: string, mimeType: string
     const text = response.text;
     if (!text) throw new Error("Nessuna risposta da Gemini");
     
-    return JSON.parse(text);
+    const parsed = JSON.parse(text);
+    return parsed.map((item: any) => ({
+      ...item,
+      quantity: item.quantity === null || item.quantity === undefined ? '' : item.quantity,
+      unit: item.unit === null || item.unit === undefined ? '' : item.unit,
+    }));
   } catch (error) {
     console.error("Errore durante l'analisi dell'audio:", error);
     throw error;

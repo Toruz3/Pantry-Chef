@@ -54,13 +54,14 @@ interface RecipeTabProps {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function RecipeTab({
+export const RecipeTab = React.forwardRef<HTMLDivElement, RecipeTabProps>(({
   products, recipe, isGenerating, isEditingRecipe, setIsEditingRecipe,
   isRecipeConfirmed, editedUsedProducts, selectedMealType,
   onOpenPreferences, onConfirmRecipe, onEditedQuantityChange,
-}: RecipeTabProps) {
+}, ref) => {
   return (
     <motion.div
+      ref={ref}
       key="recipe"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -192,42 +193,46 @@ export function RecipeTab({
             {/* Used products */}
             {editedUsedProducts.length > 0 && (
               <div className="mt-8 pt-6 border-t border-stone-200">
-                <h4 className="font-semibold text-stone-900 mb-4 text-lg">
-                  Prodotti utilizzati dalla dispensa
-                </h4>
+                {!isRecipeConfirmed && (
+                  <>
+                    <h4 className="font-semibold text-stone-900 mb-4 text-lg">
+                      Prodotti utilizzati dalla dispensa
+                    </h4>
 
-                {isEditingRecipe ? (
-                  <div className="space-y-3 mb-6">
-                    {editedUsedProducts.map((item, i) => (
-                      <div
-                        key={`${item.productId}-${i}`}
-                        className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-200 shadow-sm"
-                      >
-                        <span className="font-medium text-stone-700">{item.name}</span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number" min="0" step="0.1"
-                            value={item.quantity === 0 ? '' : item.quantity}
-                            onChange={(e) => onEditedQuantityChange(i, e.target.value)}
-                            className="w-20 px-2 py-1.5 border border-stone-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                          />
-                          <span className="text-stone-500 text-sm w-8">{item.unit}</span>
-                        </div>
+                    {isEditingRecipe ? (
+                      <div className="space-y-3 mb-6">
+                        {editedUsedProducts.map((item, i) => (
+                          <div
+                            key={`${item.productId}-${i}`}
+                            className="flex items-center justify-between bg-white p-3 rounded-xl border border-stone-200 shadow-sm"
+                          >
+                            <span className="font-medium text-stone-700">{item.name}</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number" min="0" step="0.1"
+                                value={item.quantity === 0 ? '' : item.quantity}
+                                onChange={(e) => onEditedQuantityChange(i, e.target.value)}
+                                className="w-20 px-2 py-1.5 border border-stone-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                              />
+                              <span className="text-stone-500 text-sm w-8">{item.unit}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <ul className="space-y-2 mb-6">
-                    {editedUsedProducts.map((item, i) => (
-                      <li
-                        key={`${item.productId}-${i}`}
-                        className="flex justify-between text-stone-700 bg-white p-3 rounded-xl border border-stone-100"
-                      >
-                        <span>{item.name}</span>
-                        <span className="font-medium">{item.quantity} {item.unit}</span>
-                      </li>
-                    ))}
-                  </ul>
+                    ) : (
+                      <ul className="space-y-2 mb-6">
+                        {editedUsedProducts.map((item, i) => (
+                          <li
+                            key={`${item.productId}-${i}`}
+                            className="flex justify-between text-stone-700 bg-white p-3 rounded-xl border border-stone-100"
+                          >
+                            <span>{item.name}</span>
+                            <span className="font-medium">{item.quantity} {item.unit}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 )}
 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -287,4 +292,4 @@ export function RecipeTab({
       </section>
     </motion.div>
   );
-}
+});

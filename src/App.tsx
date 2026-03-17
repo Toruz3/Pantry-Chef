@@ -3,9 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { format, parseISO, isValid } from 'date-fns';
 import { it } from 'date-fns/locale';
 import {
-  Plus, Loader2, Package, Utensils, X, Check, Mic, Square, Barcode, AlertCircle
+  Plus, Loader2, Package, Utensils, X, Check, Mic, Square, Barcode, AlertCircle, Receipt, Sparkles
 } from 'lucide-react';
-import { analyzeAudioProducts } from './services/gemini';
+import { analyzeAudioProducts, processReceiptImage } from './services/gemini';
 import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { Product, Category, CATEGORIES, CATEGORY_EMOJIS, AudioExtractedProduct } from './types';
@@ -97,7 +97,7 @@ export default function App() {
   const [isAnalyzingAudio, setIsAnalyzingAudio] = useState(false);
   const [audioParsedProducts, setAudioParsedProducts] = useState<AudioExtractedProduct[] | null>(null);
   // Track which audio product indices have a missing date (after failed confirm attempt)
-  const [missingDateIndices, setMissingDateIndices] = useState<Set<number>>(new Set());
+  const [invalidIndices, setInvalidIndices] = useState<Set<number>>(new Set());
 
   // ─── Barcode scanning ──────────────────────────────────────────────────────
   const [isScanningBarcode, setIsScanningBarcode] = useState(false);
@@ -179,7 +179,7 @@ export default function App() {
       const extracted = await analyzeAudioProducts(base64, audioBlob.type);
       if (extracted?.length > 0) {
         setAudioParsedProducts(extracted);
-        setMissingDateIndices(new Set());
+        setInvalidIndices(new Set());
       } else {
         toast.error("Non sono riuscito a trovare prodotti nell'audio. Riprova.");
       }
@@ -190,23 +190,68 @@ export default function App() {
     }
   };
 
+  const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsAnalyzingReceipt(true);
+    try {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        const mimeType = file.type;
+        try {
+          const extracted = await processReceiptImage(base64, mimeType);
+          if (extracted?.length > 0) {
+            const mapped: AudioExtractedProduct[] = extracted.map(p => ({
+              name: p.name,
+              quantity: p.quantity,
+              unit: p.unit,
+              expirationDate: p.expirationDate,
+              category: p.category,
+              isEstimate: true,
+            }));
+            setAudioParsedProducts(mapped);
+            setInvalidIndices(new Set());
+            toast.success("Scontrino analizzato! Controlla e conferma i prodotti.");
+          } else {
+            toast.error("Non sono riuscito a trovare prodotti nello scontrino.");
+          }
+        } catch (err) {
+          toast.error("Errore durante l'analisi dello scontrino.");
+        } finally {
+          setIsAnalyzingReceipt(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      toast.error("Errore nella lettura dell'immagine.");
+      setIsAnalyzingReceipt(false);
+    }
+  };
+
   const handleConfirmAudioProducts = () => {
     if (!audioParsedProducts) return;
 
-    // Trova tutti i prodotti senza data di scadenza
+    // Trova tutti i prodotti con campi obbligatori mancanti
     const missing = new Set<number>();
     audioParsedProducts.forEach((p, i) => {
-      if (!p.expirationDate || p.expirationDate.trim() === '') {
+      if (!p.expirationDate || p.expirationDate.trim() === '' || p.quantity === '' || p.unit === '') {
         missing.add(i);
       }
     });
 
     if (missing.size > 0) {
-      setMissingDateIndices(missing);
+      haptics.error();
+      setInvalidIndices(missing);
       toast.error(
         missing.size === 1
-          ? '1 prodotto è senza data di scadenza. Compilala prima di procedere.'
-          : `${missing.size} prodotti sono senza data di scadenza. Compilale prima di procedere.`
+          ? '1 prodotto ha campi obbligatori mancanti. Compilali prima di procedere.'
+          : `${missing.size} prodotti hanno campi obbligatori mancanti. Compilali prima di procedere.`
       );
       return;
     }
@@ -216,14 +261,16 @@ export default function App() {
       id: uuidv4(),
       name: p.name,
       expirationDate: p.expirationDate!,
-      quantity: p.quantity || 1,
-      unit: p.unit || 'pz',
+      quantity: p.quantity as number,
+      unit: p.unit as string,
       category: p.category && CATEGORIES.includes(p.category as Category) ? p.category : 'Altro',
       createdAt: Date.now(),
+      isEstimate: p.isEstimate,
     }));
     setProducts(prev => [...prev, ...newProducts]);
     setAudioParsedProducts(null);
-    setMissingDateIndices(new Set());
+    setInvalidIndices(new Set());
+    haptics.success();
     toast.success('Prodotti aggiunti con successo!');
   };
 
@@ -232,9 +279,11 @@ export default function App() {
     const updated = [...audioParsedProducts];
     updated[index] = { ...updated[index], [field]: value };
     setAudioParsedProducts(updated);
-    // Se l'utente ha compilato la data, rimuovi dal set degli errori
-    if (field === 'expirationDate' && value) {
-      setMissingDateIndices(prev => {
+    
+    // Se l'utente ha compilato tutti i campi, rimuovi dal set degli errori
+    const current = updated[index];
+    if (current.expirationDate && current.quantity !== '' && current.unit !== '') {
+      setInvalidIndices(prev => {
         const next = new Set(prev);
         next.delete(index);
         return next;
@@ -243,10 +292,11 @@ export default function App() {
   };
 
   const handleRemoveAudioProduct = (index: number) => {
+    haptics.medium();
     if (!audioParsedProducts) return;
     const updated = audioParsedProducts.filter((_, i) => i !== index);
     setAudioParsedProducts(updated.length > 0 ? updated : null);
-    setMissingDateIndices(prev => {
+    setInvalidIndices(prev => {
       const next = new Set<number>();
       prev.forEach(i => { if (i < index) next.add(i); else if (i > index) next.add(i - 1); });
       return next;
@@ -338,7 +388,7 @@ export default function App() {
                   <div className="grid grid-cols-2 gap-3">
                     <button type="button"
                       onClick={() => setIsScanningBarcode(true)}
-                      disabled={isRecording || isAnalyzingAudio || isFetchingBarcode}
+                      disabled={isRecording || isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}
                       className="col-span-1 min-h-[100px] bg-purple-50 text-purple-700 border border-purple-200 rounded-2xl font-medium hover:bg-purple-100 active:scale-[0.98] disabled:opacity-50 transition-all flex flex-col items-center justify-center gap-2 shadow-sm"
                     >
                       {isFetchingBarcode ? <Loader2 className="w-7 h-7 animate-spin" /> : <Barcode className="w-7 h-7" />}
@@ -350,7 +400,7 @@ export default function App() {
 
                     <button type="button"
                       onClick={isRecording ? stopRecording : startRecording}
-                      disabled={isAnalyzingAudio || isFetchingBarcode}
+                      disabled={isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}
                       className={cn(
                         'col-span-1 min-h-[100px] rounded-2xl font-medium transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-2 shadow-sm',
                         isRecording
@@ -367,6 +417,28 @@ export default function App() {
                       <div className="flex flex-col items-center">
                         <span className="text-sm font-semibold">{isAnalyzingAudio ? 'Analisi…' : isRecording ? 'Ferma' : 'Dettatura'}</span>
                         <span className="text-[10px] opacity-70 mt-0.5">Usa la voce</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  <div className="mt-3">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      capture="environment" 
+                      ref={fileInputRef}
+                      onChange={handleReceiptUpload}
+                      className="hidden" 
+                    />
+                    <button type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isRecording || isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}
+                      className="w-full min-h-[80px] bg-amber-50 text-amber-700 border border-amber-200 rounded-2xl font-medium hover:bg-amber-100 active:scale-[0.98] disabled:opacity-50 transition-all flex flex-row items-center justify-center gap-4 shadow-sm"
+                    >
+                      {isAnalyzingReceipt ? <Loader2 className="w-7 h-7 animate-spin" /> : <Receipt className="w-7 h-7" />}
+                      <div className="flex flex-col items-start">
+                        <span className="text-sm font-semibold">{isAnalyzingReceipt ? 'Analisi Scontrino…' : 'Scansiona Scontrino'}</span>
+                        <span className="text-[10px] opacity-70 mt-0.5">Aggiungi prodotti da una foto</span>
                       </div>
                     </button>
                   </div>
@@ -449,13 +521,17 @@ export default function App() {
 
                     <div className="space-y-4 mb-6">
                       {audioParsedProducts.map((product, index) => {
-                        const isMissingDate = missingDateIndices.has(index);
+                        const isInvalid = invalidIndices.has(index);
+                        const isMissingDate = isInvalid && (!product.expirationDate || product.expirationDate.trim() === '');
+                        const isMissingQuantity = isInvalid && product.quantity === '';
+                        const isMissingUnit = isInvalid && product.unit === '';
+                        
                         return (
                           <div
                             key={index}
                             className={cn(
                               'bg-stone-50 border rounded-xl p-4 relative group transition-colors',
-                              isMissingDate ? 'border-red-400 bg-red-50/30' : 'border-stone-200'
+                              isInvalid ? 'border-red-400 bg-red-50/30' : 'border-stone-200'
                             )}
                           >
                             <button
@@ -466,7 +542,14 @@ export default function App() {
                             </button>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                               <div>
-                                <label className="block text-xs font-medium text-stone-500 mb-1">Nome</label>
+                                <label className="block text-xs font-medium text-stone-500 mb-1 flex items-center gap-1">
+                                  Nome
+                                  {product.isEstimate && (
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wider" title="Dati stimati dall'AI">
+                                      <Sparkles className="w-2.5 h-2.5" /> Stima
+                                    </span>
+                                  )}
+                                </label>
                                 <input type="text" value={product.name}
                                   onChange={(e) => handleUpdateAudioProduct(index, 'name', e.target.value)}
                                   className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
@@ -478,24 +561,45 @@ export default function App() {
                                   onChange={(e) => handleUpdateAudioProduct(index, 'category', e.target.value)}
                                   className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
                                 >
-                                  {CATEGORIES.map(cat => <option key={cat} value={cat}>{CATEGORY_EMOJIS[cat]} {cat}</option>)}
+                                  {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat} {CATEGORY_EMOJIS[cat]}</option>)}
                                 </select>
                               </div>
                             </div>
                             <div className="flex gap-3">
                               <div className="flex-1">
-                                <label className="block text-xs font-medium text-stone-500 mb-1">Quantità</label>
+                                <label className={cn(
+                                  'block text-xs font-medium mb-1',
+                                  isMissingQuantity ? 'text-red-600' : 'text-stone-500'
+                                )}>
+                                  Quantità {isMissingQuantity && <span className="font-bold">*</span>}
+                                </label>
                                 <input type="number" min="0.1" step="0.1" value={product.quantity}
                                   onChange={(e) => handleUpdateAudioProduct(index, 'quantity', e.target.value ? Number(e.target.value) : '')}
-                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                  className={cn(
+                                    'w-full bg-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-sm border',
+                                    isMissingQuantity
+                                      ? 'border-red-400 focus:ring-red-400 bg-red-50'
+                                      : 'border-stone-200 focus:ring-emerald-500'
+                                  )}
                                 />
                               </div>
                               <div className="w-1/3">
-                                <label className="block text-xs font-medium text-stone-500 mb-1">Unità</label>
+                                <label className={cn(
+                                  'block text-xs font-medium mb-1',
+                                  isMissingUnit ? 'text-red-600' : 'text-stone-500'
+                                )}>
+                                  Unità {isMissingUnit && <span className="font-bold">*</span>}
+                                </label>
                                 <select value={product.unit}
                                   onChange={(e) => handleUpdateAudioProduct(index, 'unit', e.target.value)}
-                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
+                                  className={cn(
+                                    'w-full bg-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-sm appearance-none border',
+                                    isMissingUnit
+                                      ? 'border-red-400 focus:ring-red-400 bg-red-50'
+                                      : 'border-stone-200 focus:ring-emerald-500'
+                                  )}
                                 >
+                                  <option value="" disabled>Seleziona...</option>
                                   {PRODUCT_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
                                 </select>
                               </div>
@@ -525,7 +629,7 @@ export default function App() {
                     </div>
                     <div className="flex gap-3">
                       <button
-                        onClick={() => { setAudioParsedProducts(null); setMissingDateIndices(new Set()); }}
+                        onClick={() => { setAudioParsedProducts(null); setInvalidIndices(new Set()); }}
                         className="flex-1 py-3 px-4 text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
                       >
                         Annulla
@@ -646,30 +750,37 @@ export default function App() {
       <AnimatePresence>
         {(isRecording || isAnalyzingAudio) && (
           <ListeningModal
+            key="listening"
             isRecording={isRecording}
             isAnalyzingAudio={isAnalyzingAudio}
             onStop={stopRecording}
           />
         )}
-        <BarcodeScannerModal
-          isOpen={isScanningBarcode}
-          onClose={() => setIsScanningBarcode(false)}
-          onScan={handleBarcodeScan}
-        />
-        <ClearConfirmModal
-          isOpen={showClearConfirm}
-          onConfirm={clearProducts}
-          onCancel={() => setShowClearConfirm(false)}
-        />
-        <PreferencesModal
-          isOpen={showPreferencesModal}
-          mealType={selectedMealType}
-          isGenerating={isGenerating}
-          onConfirm={(servings, useMicrowave, useAirFryer, preferences) => {
-            handleGenerateRecipe(sortedProducts, servings, useMicrowave, useAirFryer, preferences, (msg) => toast.error(msg));
-          }}
-          onCancel={() => setShowPreferencesModal(false)}
-        />
+        {isScanningBarcode && (
+          <BarcodeScannerModal
+            key="barcode"
+            onClose={() => setIsScanningBarcode(false)}
+            onScan={handleBarcodeScan}
+          />
+        )}
+        {showClearConfirm && (
+          <ClearConfirmModal
+            key="clear"
+            onConfirm={clearProducts}
+            onCancel={() => setShowClearConfirm(false)}
+          />
+        )}
+        {showPreferencesModal && (
+          <PreferencesModal
+            key="preferences"
+            mealType={selectedMealType}
+            isGenerating={isGenerating}
+            onConfirm={(servings, useMicrowave, useAirFryer, preferences) => {
+              handleGenerateRecipe(sortedProducts, servings, useMicrowave, useAirFryer, preferences, (msg) => toast.error(msg));
+            }}
+            onCancel={() => setShowPreferencesModal(false)}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

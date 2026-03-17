@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ArrowUpDown, Trash2, Package, AlertTriangle, Clock, CheckCircle } from 'lucide-react';
+import { ArrowUpDown, Trash2, Package, AlertTriangle, Clock, CheckCircle, Search } from 'lucide-react';
 import { differenceInDays, parseISO } from 'date-fns';
 import { Product, CATEGORIES, CATEGORY_EMOJIS } from '../../types';
 import { SortOption, SORT_OPTIONS } from '../../constants/sortOptions';
@@ -35,12 +35,39 @@ interface PantryTabProps {
   handleDeleteProduct: (id: string) => void;
 }
 
-export function PantryTab({
+export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
   products, groupedProducts, sortBy, setSortBy,
   setShowClearConfirm, setActiveTab,
   editingProductId, editState,
   handleEditProduct, handleSaveEdit, handleCancelEdit, handleDeleteProduct,
-}: PantryTabProps) {
+}, ref) => {
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase();
+    return products.filter(p => p.name.toLowerCase().startsWith(query));
+  }, [products, searchQuery]);
+
+  const handleSearchResultClick = (productId: string) => {
+    setSearchQuery('');
+    setIsSearchFocused(false);
+    
+    // Use setTimeout to ensure the DOM has updated and the dropdown is closed
+    setTimeout(() => {
+      const element = document.getElementById(`product-${productId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Optional: add a brief highlight effect
+        element.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2');
+        setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2');
+        }, 2000);
+      }
+    }, 100);
+  };
 
   const stats = useMemo(() => {
     const expired   = products.filter(p => differenceInDays(parseISO(p.expirationDate), new Date()) < 0).length;
@@ -51,6 +78,7 @@ export function PantryTab({
 
   return (
     <motion.div
+      ref={ref}
       key="pantry"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
@@ -64,6 +92,75 @@ export function PantryTab({
           <h2 className="text-2xl font-bold text-stone-900">La Tua Dispensa</h2>
           <p className="text-stone-500 mt-1">Gestisci i tuoi ingredienti e le loro scadenze</p>
         </div>
+
+        {/* Barra di ricerca globale */}
+        {products.length > 0 && (
+          <div className="relative mb-6 z-50">
+            <div className={cn(
+              "relative flex items-center bg-white border rounded-2xl transition-all shadow-sm",
+              isSearchFocused ? "border-emerald-500 ring-4 ring-emerald-500/10" : "border-stone-200"
+            )}>
+              <Search className="w-5 h-5 text-stone-400 ml-4" />
+              <input
+                type="text"
+                placeholder="Cerca un prodotto..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                className="w-full bg-transparent border-none py-3.5 px-3 focus:outline-none text-stone-800 placeholder:text-stone-400"
+              />
+              {searchQuery && (
+                <button 
+                  onClick={() => setSearchQuery('')}
+                  className="p-2 mr-2 text-stone-400 hover:text-stone-600 rounded-full hover:bg-stone-100"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Risultati ricerca */}
+            <AnimatePresence>
+              {searchQuery.trim() && isSearchFocused && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  className="absolute top-full left-0 right-0 mt-2 bg-white border border-stone-200 rounded-2xl shadow-xl overflow-hidden max-h-64 overflow-y-auto"
+                >
+                  {searchResults.length > 0 ? (
+                    <ul className="divide-y divide-stone-100">
+                      {searchResults.map(product => (
+                        <li 
+                          key={product.id}
+                          onClick={() => handleSearchResultClick(product.id)}
+                          className="p-3 hover:bg-stone-50 cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-2xl" aria-hidden="true">
+                              {product.category ? CATEGORY_EMOJIS[product.category] : '📦'}
+                            </span>
+                            <div>
+                              <p className="font-medium text-stone-800">{product.name}</p>
+                              <p className="text-xs text-stone-500">
+                                {product.quantity} {product.unit} • Scadenza: {product.expirationDate}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="p-4 text-center text-stone-500 text-sm">
+                      Nessun prodotto trovato per "{searchQuery}"
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         {/* Statistiche rapide */}
         {products.length > 0 && (
@@ -159,13 +256,6 @@ export function PantryTab({
                 <line x1="40" y1="35" x2="40" y2="45" strokeWidth="2" strokeOpacity="0.5" />
                 <line x1="60" y1="35" x2="60" y2="45" strokeWidth="2" strokeOpacity="0.5" />
               </svg>
-              <motion.div 
-                animate={{ y: [0, -5, 0] }} 
-                transition={{ repeat: Infinity, duration: 2 }}
-                className="absolute -top-2 -right-2 text-3xl"
-              >
-                🛒
-              </motion.div>
             </div>
             <p className="text-stone-900 font-bold text-xl mb-2">La tua dispensa è vuota!</p>
             <p className="text-sm max-w-xs mx-auto text-stone-500 mb-8">
@@ -186,8 +276,8 @@ export function PantryTab({
               return (
                 <div key={category} className="space-y-3">
                   <div className="sticky top-0 sm:top-16 z-20 flex items-center gap-2 py-3 bg-stone-50 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-                    <span className="text-xl" aria-hidden="true">{CATEGORY_EMOJIS[category]}</span>
                     <h3 className="text-base font-bold text-stone-800">{category}</h3>
+                    <span className="text-xl" aria-hidden="true">{CATEGORY_EMOJIS[category]}</span>
                     <span className="text-xs font-semibold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">
                       {categoryProducts.length}
                     </span>
@@ -216,4 +306,4 @@ export function PantryTab({
       </section>
     </motion.div>
   );
-}
+});

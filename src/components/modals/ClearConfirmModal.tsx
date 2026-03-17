@@ -8,11 +8,14 @@ interface ClearConfirmModalProps {
   onCancel: () => void;
 }
 
-export function ClearConfirmModal({ isOpen, onConfirm, onCancel }: ClearConfirmModalProps) {
-  if (!isOpen) return null;
-
+export function ClearConfirmModal({ onConfirm, onCancel }: Omit<ClearConfirmModalProps, 'isOpen'>) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm"
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -41,6 +44,6 @@ export function ClearConfirmModal({ isOpen, onConfirm, onCancel }: ClearConfirmM
           </button>
         </div>
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

@@ -20,19 +20,19 @@ export function ClearConfirmModal({ onConfirm, onCancel }: Omit<ClearConfirmModa
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+        className="bg-white dark:bg-stone-900 rounded-2xl p-6 max-w-sm w-full shadow-xl dark:border dark:border-stone-800"
       >
-        <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4 mx-auto">
+        <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 flex items-center justify-center mb-4 mx-auto">
           <Trash2 className="w-6 h-6" />
         </div>
-        <h3 className="text-xl font-bold text-center text-stone-900 mb-2">Svuota Dispensa</h3>
-        <p className="text-center text-stone-600 mb-6 text-sm">
+        <h3 className="text-xl font-bold text-center text-stone-900 dark:text-white mb-2">Svuota Dispensa</h3>
+        <p className="text-center text-stone-600 dark:text-stone-400 mb-6 text-sm">
           Sei sicuro di voler rimuovere tutti i prodotti dalla tua dispensa? Questa azione non può essere annullata.
         </p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2.5 rounded-xl font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 transition-colors"
+            className="flex-1 px-4 py-2.5 rounded-xl font-medium text-stone-700 dark:text-stone-300 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors"
           >
             Annulla
           </button>

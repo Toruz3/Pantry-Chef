@@ -1,73 +1,84 @@
-import React, { useState, useRef, useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { format, parseISO, isValid } from 'date-fns';
-import { it } from 'date-fns/locale';
-import {
-  Plus, Loader2, Package, Utensils, X, Check, Mic, Square, Barcode, AlertCircle, Receipt, Sparkles
-} from 'lucide-react';
-import { analyzeAudioProducts, processReceiptImage } from './services/gemini';
-import { cn } from './lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
-import { Product, Category, CATEGORIES, CATEGORY_EMOJIS, AudioExtractedProduct } from './types';
-import { PRODUCT_UNITS } from './constants/units';
-import { Toaster, toast } from 'react-hot-toast';
+import React, { useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { AnimatePresence } from 'motion/react';
 
 import { useProducts } from './hooks/useProducts';
 import { useRecipe } from './hooks/useRecipe';
-import { PantryTab } from './components/PantryTab';
-import { RecipeTab } from './components/RecipeTab';
-import { ClearConfirmModal } from './components/modals/ClearConfirmModal';
-import { PreferencesModal } from './components/modals/PreferencesModal';
-import { ListeningModal } from './components/modals/ListeningModal';
-import { BarcodeScannerModal } from './components/modals/BarcodeScannerModal';
-import { addRandomProducts } from './utils/testData';
+import { useSettings } from './hooks/useSettings';
+import { useAddProductMethods } from './hooks/useAddProductMethods';
+import { ModalsContainer } from './components/modals/ModalsContainer';
+import { useStats } from './hooks/useStats';
+import { MainLayout } from './components/Layout/MainLayout';
+import { PantrySkeleton, RecipeSkeleton, StatsSkeleton, SettingsSkeleton } from './components/ui/Skeleton';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<'add' | 'pantry' | 'recipe'>('pantry');
+const AddProductModal = React.lazy(() => import('./components/AddTab').then(m => ({ default: m.AddProductModal })));
+const PantryTab = React.lazy(() => import('./components/PantryTab').then(m => ({ default: m.PantryTab })));
+const RecipeTab = React.lazy(() => import('./components/RecipeTab').then(m => ({ default: m.RecipeTab })));
+const StatsTab = React.lazy(() => import('./components/StatsTab').then(m => ({ default: m.StatsTab })));
+const SettingsTab = React.lazy(() => import('./components/SettingsTab').then(m => ({ default: m.SettingsTab })));
+
+import { checkAndSendNotifications } from './utils/notifications';
+import { useAuth } from './contexts/AuthContext';
+import { Login } from './components/Auth/Login';
+
+import { ProductsProvider, useProductsContext } from './contexts/ProductsContext';
+
+function MainAppContent() {
+  const [activeTab, setActiveTab] = useState<'pantry' | 'recipe' | 'stats' | 'settings'>('pantry');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // ─── Products ──────────────────────────────────────────────────────────────
 
   const {
-    products, setProducts,
+    products, addProducts, addProduct,
     sortBy, setSortBy,
     showClearConfirm, setShowClearConfirm,
-    newProductName, setNewProductName,
-    newProductDate, setNewProductDate,
-    newProductQuantity, setNewProductQuantity,
-    newProductUnit, setNewProductUnit,
-    newProductCategory, setNewProductCategory,
     isCategorizing,
     editingProductId,
-    editProductName, setEditProductName,
-    editProductDate, setEditProductDate,
-    editProductQuantity, setEditProductQuantity,
-    editProductUnit, setEditProductUnit,
-    editProductCategory, setEditProductCategory,
     sortedProducts, groupedProducts,
-    handleAddProduct, handleDeleteProduct,
+    handleDeleteProduct,
+    handleConsumeProduct, handleWasteProduct,
     handleEditProduct, handleSaveEdit, handleCancelEdit,
-    clearProducts,
-  } = useProducts();
+    clearProducts, consumeProducts,
+  } = useProductsContext();
 
-  const editState = {
-    name: editProductName,         setName: setEditProductName,
-    category: editProductCategory, setCategory: setEditProductCategory,
-    quantity: editProductQuantity, setQuantity: setEditProductQuantity,
-    unit: editProductUnit,         setUnit: setEditProductUnit,
-    date: editProductDate,         setDate: setEditProductDate,
+  const { stats, recordConsumption, recordWaste } = useStats();
+
+  const onConsumeProduct = (id: string, quantity: number = 1) => {
+    const product = products.find(p => p.id === id);
+    handleConsumeProduct(id, quantity);
+    recordConsumption(quantity, product?.category);
   };
+
+  const onWasteProduct = (id: string, quantity: number = 1) => {
+    const product = products.find(p => p.id === id);
+    handleWasteProduct(id, quantity);
+    recordWaste(quantity, product?.category);
+  };
+
+  // ─── Add Product Methods ───────────────────────────────────────────────────
+
+  const {
+    scannedProductName, setScannedProductName,
+    isRecording, isAnalyzingAudio, audioParsedProducts, setAudioParsedProducts,
+    invalidIndices, setInvalidIndices, isScanningBarcode, setIsScanningBarcode,
+    isFetchingBarcode, isAnalyzingReceipt, isReceiptModalOpen, setIsReceiptModalOpen,
+    showAddSheet, setShowAddSheet, cameraInputRef, galleryInputRef,
+    handleBarcodeScan, startRecording, stopRecording, handleReceiptUpload
+  } = useAddProductMethods();
 
   // ─── Recipe ────────────────────────────────────────────────────────────────
 
   const {
-    recipe, isGenerating,
+    recipes, recipe, selectedRecipeIndex, handleSelectRecipe, isGenerating,
     isEditingRecipe, setIsEditingRecipe,
     isRecipeConfirmed, editedUsedProducts,
     showPreferencesModal, setShowPreferencesModal,
     selectedMealType,
     openPreferencesModal,
     handleGenerateRecipe, handleConfirmRecipe, handleEditedQuantityChange,
-  } = useRecipe(setProducts);
+  } = useRecipe(consumeProducts);
 
   const handleOpenPreferences = (mealType: 'colazione' | 'pranzo' | 'cena' | 'spuntino') => {
     if (products.length === 0) {
@@ -77,618 +88,76 @@ export default function App() {
     openPreferencesModal(mealType);
   };
 
-  const onConfirmRecipe = () => {
-    handleConfirmRecipe();
+  const onConfirmRecipe = async () => {
+    await handleConfirmRecipe();
+    const totalConsumed = editedUsedProducts.reduce((sum, item) => sum + item.quantity, 0);
+    recordConsumption(totalConsumed);
     toast.success('Ricetta confermata!');
   };
 
   // ─── Navigation ────────────────────────────────────────────────────────────
 
-  const handleTabChange = (tab: 'add' | 'pantry' | 'recipe') => {
+  const handleTabChange = (tab: 'pantry' | 'recipe' | 'stats' | 'settings') => {
     if (isGenerating) return;
     setActiveTab(tab);
   };
 
-  // ─── Audio recording ───────────────────────────────────────────────────────
+  // ─── Settings & Notifications ────────────────────────────────────────────────
+  const { settings, updateSettings } = useSettings();
 
-  const audioChunksRef = useRef<Blob[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [isAnalyzingAudio, setIsAnalyzingAudio] = useState(false);
-  const [audioParsedProducts, setAudioParsedProducts] = useState<AudioExtractedProduct[] | null>(null);
-  // Track which audio product indices have a missing date (after failed confirm attempt)
-  const [invalidIndices, setInvalidIndices] = useState<Set<number>>(new Set());
-
-  // ─── Barcode scanning ──────────────────────────────────────────────────────
-  const [isScanningBarcode, setIsScanningBarcode] = useState(false);
-  const [isFetchingBarcode, setIsFetchingBarcode] = useState(false);
-
-  const handleBarcodeScan = async (barcode: string) => {
-    setIsScanningBarcode(false);
-    setIsFetchingBarcode(true);
-    
-    try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-      const data = await res.json();
-      
-      if (data.status === 1 && data.product) {
-        const name = data.product.product_name || data.product.product_name_it || data.product.generic_name;
-        const brand = data.product.brands ? data.product.brands.split(',')[0] : '';
-        const fullName = brand ? `${brand} ${name}` : name;
-        
-        if (fullName) {
-          setNewProductName(fullName);
-          toast.success(`Prodotto trovato: ${fullName}`);
-        } else {
-          toast.error("Prodotto trovato ma senza nome. Inseriscilo manualmente.");
-        }
-      } else {
-        toast.error("Prodotto non trovato nel database. Inseriscilo manualmente.");
-      }
-    } catch (err) {
-      toast.error("Errore durante la ricerca del prodotto. Riprova o inseriscilo manualmente.");
-    } finally {
-      setIsFetchingBarcode(false);
-    }
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : MediaRecorder.isTypeSupported('audio/mp4')
-          ? 'audio/mp4'
-          : 'audio/ogg';
-      
-      const recorder = new MediaRecorder(stream, { mimeType });
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-      recorder.onstop = async () => {
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        await processAudio(blob);
-        stream.getTracks().forEach(t => t.stop());
-      };
-      recorder.start();
-      setMediaRecorder(recorder);
-      setIsRecording(true);
-    } catch {
-      toast.error('Impossibile accedere al microfono. Verifica i permessi.');
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorder && isRecording) { mediaRecorder.stop(); setIsRecording(false); }
-  };
-
-  const processAudio = async (audioBlob: Blob) => {
-    setIsAnalyzingAudio(true);
-    try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(audioBlob);
-        reader.onloadend = () => {
-          const b64 = reader.result?.toString().split(',')[1];
-          if (b64) resolve(b64);
-          else reject(new Error('Impossibile leggere il file audio.'));
-        };
-        reader.onerror = () => reject(new Error('Errore nella lettura del file audio.'));
-      });
-
-      const extracted = await analyzeAudioProducts(base64, audioBlob.type);
-      if (extracted?.length > 0) {
-        setAudioParsedProducts(extracted);
-        setInvalidIndices(new Set());
-      } else {
-        toast.error("Non sono riuscito a trovare prodotti nell'audio. Riprova.");
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Errore durante l'analisi dell'audio.");
-    } finally {
-      setIsAnalyzingAudio(false);
-    }
-  };
-
-  const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleReceiptUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsAnalyzingReceipt(true);
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        const mimeType = file.type;
-        try {
-          const extracted = await processReceiptImage(base64, mimeType);
-          if (extracted?.length > 0) {
-            const mapped: AudioExtractedProduct[] = extracted.map(p => ({
-              name: p.name,
-              quantity: p.quantity,
-              unit: p.unit,
-              expirationDate: p.expirationDate,
-              category: p.category,
-              isEstimate: true,
-            }));
-            setAudioParsedProducts(mapped);
-            setInvalidIndices(new Set());
-            toast.success("Scontrino analizzato! Controlla e conferma i prodotti.");
-          } else {
-            toast.error("Non sono riuscito a trovare prodotti nello scontrino.");
-          }
-        } catch (err) {
-          toast.error("Errore durante l'analisi dello scontrino.");
-        } finally {
-          setIsAnalyzingReceipt(false);
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      toast.error("Errore nella lettura dell'immagine.");
-      setIsAnalyzingReceipt(false);
-    }
-  };
-
-  const handleConfirmAudioProducts = () => {
-    if (!audioParsedProducts) return;
-
-    // Trova tutti i prodotti con campi obbligatori mancanti
-    const missing = new Set<number>();
-    audioParsedProducts.forEach((p, i) => {
-      if (!p.expirationDate || p.expirationDate.trim() === '' || p.quantity === '' || p.unit === '') {
-        missing.add(i);
-      }
-    });
-
-    if (missing.size > 0) {
-      haptics.error();
-      setInvalidIndices(missing);
-      toast.error(
-        missing.size === 1
-          ? '1 prodotto ha campi obbligatori mancanti. Compilali prima di procedere.'
-          : `${missing.size} prodotti hanno campi obbligatori mancanti. Compilali prima di procedere.`
+  React.useEffect(() => {
+    if (settings.notificationsEnabled && products.length > 0) {
+      checkAndSendNotifications(
+        products,
+        settings.notifyDaysInAdvance,
+        settings.notifyTime,
+        settings.lastNotifiedDate,
+        (dateStr) => updateSettings({ lastNotifiedDate: dateStr })
       );
-      return;
     }
+  }, [products, settings, updateSettings]);
 
-    // Tutto ok, aggiungi i prodotti
-    const newProducts: Product[] = audioParsedProducts.map(p => ({
-      id: uuidv4(),
-      name: p.name,
-      expirationDate: p.expirationDate!,
-      quantity: p.quantity as number,
-      unit: p.unit as string,
-      category: p.category && CATEGORIES.includes(p.category as Category) ? p.category : 'Altro',
-      createdAt: Date.now(),
-      isEstimate: p.isEstimate,
-    }));
-    setProducts(prev => [...prev, ...newProducts]);
-    setAudioParsedProducts(null);
-    setInvalidIndices(new Set());
-    haptics.success();
-    toast.success('Prodotti aggiunti con successo!');
-  };
-
-  const handleUpdateAudioProduct = (index: number, field: keyof AudioExtractedProduct, value: string | number) => {
-    if (!audioParsedProducts) return;
-    const updated = [...audioParsedProducts];
-    updated[index] = { ...updated[index], [field]: value };
-    setAudioParsedProducts(updated);
-    
-    // Se l'utente ha compilato tutti i campi, rimuovi dal set degli errori
-    const current = updated[index];
-    if (current.expirationDate && current.quantity !== '' && current.unit !== '') {
-      setInvalidIndices(prev => {
-        const next = new Set(prev);
-        next.delete(index);
-        return next;
-      });
+  React.useEffect(() => {
+    if (settings.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
     }
-  };
-
-  const handleRemoveAudioProduct = (index: number) => {
-    haptics.medium();
-    if (!audioParsedProducts) return;
-    const updated = audioParsedProducts.filter((_, i) => i !== index);
-    setAudioParsedProducts(updated.length > 0 ? updated : null);
-    setInvalidIndices(prev => {
-      const next = new Set<number>();
-      prev.forEach(i => { if (i < index) next.add(i); else if (i > index) next.add(i - 1); });
-      return next;
-    });
-  };
+  }, [settings.darkMode]);
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-900 font-sans selection:bg-emerald-200">
-      <Toaster 
-        position="top-center"
-        toastOptions={{
-          duration: 3500,
-          style: {
-            borderRadius: '16px',
-            background: '#333',
-            color: '#fff',
-            fontSize: '14px',
-            fontWeight: 500,
-          },
-          success: {
-            style: { background: '#059669' },
-          },
-          error: {
-            style: { background: '#dc2626' },
-          },
-        }}
-      />
-
-      {/* Desktop header */}
-      <header className="hidden sm:block bg-white/80 backdrop-blur-md border-b border-stone-200/50 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="Chef da Dispensa Logo" className="w-10 h-10 rounded-xl shadow-sm object-cover" referrerPolicy="no-referrer" />
-            <h1 className="text-xl font-semibold tracking-tight hidden sm:block">Chef da Dispensa</h1>
-          </div>
-          <nav className="hidden sm:flex gap-2">
-            {(['add', 'pantry', 'recipe'] as const).map(tab => {
-              const labels: Record<string, string> = { add: 'Aggiungi', pantry: 'Dispensa', recipe: 'Ricette' };
-              const Icons: Record<string, React.ElementType> = { add: Plus, pantry: Package, recipe: Utensils };
-              const Icon = Icons[tab];
-              return (
-                <button
-                  key={tab}
-                  onClick={() => handleTabChange(tab)}
-                  disabled={isGenerating}
-                  className={cn(
-                    'px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors',
-                    activeTab === tab ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-600 hover:bg-stone-100/80',
-                    isGenerating && 'opacity-50 cursor-not-allowed',
-                  )}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span>{labels[tab]}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 sm:pb-8 sm:py-8">
-
-        <AnimatePresence mode="wait">
-
-          {/* ── Add tab ─────────────────────────────────────────────────────── */}
-          {activeTab === 'add' && (
-            <motion.div
-              key="add"
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className="max-w-2xl mx-auto space-y-6"
-            >
-              <section className="pt-2 sm:pt-8">
-                <div className="text-center mb-8">
-                  <img src="/logo.png" alt="Chef da Dispensa Logo" className="w-16 h-16 rounded-2xl shadow-sm mx-auto mb-4 object-cover" referrerPolicy="no-referrer" />
-                  <h2 className="text-2xl font-bold text-stone-900">Aggiungi Prodotto</h2>
-                  <p className="text-stone-500 mt-1">Inserisci i dettagli o scansiona l'etichetta</p>
-                </div>
-
-                <form
-                  onSubmit={(e) => handleAddProduct(e, () => {
-                    toast.success('Prodotto aggiunto con successo!');
-                  }, (msg) => toast.error(msg))}
-                  className="space-y-6"
-                >
-                  {/* Quick Actions */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <button type="button"
-                      onClick={() => setIsScanningBarcode(true)}
-                      disabled={isRecording || isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}
-                      className="col-span-1 min-h-[100px] bg-purple-50 text-purple-700 border border-purple-200 rounded-2xl font-medium hover:bg-purple-100 active:scale-[0.98] disabled:opacity-50 transition-all flex flex-col items-center justify-center gap-2 shadow-sm"
-                    >
-                      {isFetchingBarcode ? <Loader2 className="w-7 h-7 animate-spin" /> : <Barcode className="w-7 h-7" />}
-                      <div className="flex flex-col items-center">
-                        <span className="text-sm font-semibold">{isFetchingBarcode ? 'Ricerca…' : 'Scansiona'}</span>
-                        <span className="text-[10px] opacity-70 mt-0.5">Codice a barre</span>
-                      </div>
-                    </button>
-
-                    <button type="button"
-                      onClick={isRecording ? stopRecording : startRecording}
-                      disabled={isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}
-                      className={cn(
-                        'col-span-1 min-h-[100px] rounded-2xl font-medium transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-2 shadow-sm',
-                        isRecording
-                          ? 'bg-red-100 text-red-700 border border-red-200 hover:bg-red-200 animate-pulse'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 disabled:opacity-50',
-                      )}
-                    >
-                      {isAnalyzingAudio
-                        ? <Loader2 className="w-7 h-7 animate-spin" />
-                        : isRecording
-                          ? <Square className="w-7 h-7 fill-current" />
-                          : <Mic className="w-7 h-7" />
-                      }
-                      <div className="flex flex-col items-center">
-                        <span className="text-sm font-semibold">{isAnalyzingAudio ? 'Analisi…' : isRecording ? 'Ferma' : 'Dettatura'}</span>
-                        <span className="text-[10px] opacity-70 mt-0.5">Usa la voce</span>
-                      </div>
-                    </button>
-                  </div>
-
-                  <div className="mt-3">
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      capture="environment" 
-                      ref={fileInputRef}
-                      onChange={handleReceiptUpload}
-                      className="hidden" 
-                    />
-                    <button type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isRecording || isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}
-                      className="w-full min-h-[80px] bg-amber-50 text-amber-700 border border-amber-200 rounded-2xl font-medium hover:bg-amber-100 active:scale-[0.98] disabled:opacity-50 transition-all flex flex-row items-center justify-center gap-4 shadow-sm"
-                    >
-                      {isAnalyzingReceipt ? <Loader2 className="w-7 h-7 animate-spin" /> : <Receipt className="w-7 h-7" />}
-                      <div className="flex flex-col items-start">
-                        <span className="text-sm font-semibold">{isAnalyzingReceipt ? 'Analisi Scontrino…' : 'Scansiona Scontrino'}</span>
-                        <span className="text-[10px] opacity-70 mt-0.5">Aggiungi prodotti da una foto</span>
-                      </div>
-                    </button>
-                  </div>
-
-                  <div className="relative flex items-center py-2">
-                    <div className="flex-grow border-t border-stone-200"></div>
-                    <span className="flex-shrink-0 mx-4 text-stone-400 text-xs font-medium uppercase tracking-wider">Oppure inserisci manualmente</span>
-                    <div className="flex-grow border-t border-stone-200"></div>
-                  </div>
-
-                  {/* Manual Entry */}
-                  <div className="space-y-4 bg-white p-5 rounded-2xl border border-stone-100 shadow-sm">
-                    <div>
-                      <label htmlFor="name" className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1.5">Nome Prodotto</label>
-                      <input type="text" id="name" value={newProductName}
-                        onChange={(e) => setNewProductName(e.target.value)}
-                        placeholder="es. Latte, Uova, Spinaci"
-                        className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow text-base bg-stone-50"
-                      />
-                    </div>
-                    
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="col-span-1">
-                        <label htmlFor="date" className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1.5">Scadenza</label>
-                        <input type="date" id="date" value={newProductDate}
-                          onChange={(e) => setNewProductDate(e.target.value)}
-                          className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow text-base bg-stone-50"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <div className="flex-1">
-                        <label htmlFor="quantity" className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1.5">Quantità</label>
-                        <input type="number" id="quantity" min="0" step="0.1" inputMode="decimal"
-                          value={newProductQuantity}
-                          onChange={(e) => setNewProductQuantity(e.target.value === '' ? '' : Number(e.target.value))}
-                          placeholder="es. 500"
-                          className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow text-base bg-stone-50"
-                        />
-                      </div>
-                      <div className="w-1/3">
-                        <label htmlFor="unit" className="block text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1.5">Unità</label>
-                        <select id="unit" value={newProductUnit}
-                          onChange={(e) => setNewProductUnit(e.target.value)}
-                          className="w-full px-4 py-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-shadow text-base bg-stone-50"
-                        >
-                          {PRODUCT_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                        </select>
-                      </div>
-                    </div>
-
-                    <button type="submit"
-                      disabled={!newProductName || !newProductDate || newProductQuantity === '' || isCategorizing}
-                      className="w-full mt-2 bg-stone-900 text-white px-4 py-3.5 rounded-xl font-medium hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-sm"
-                    >
-                      {isCategorizing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
-                      {isCategorizing ? 'Categorizzazione...' : 'Aggiungi'}
-                    </button>
-                  </div>
-                </form>
-
-                {/* Audio product review */}
-                {audioParsedProducts && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                    className="mt-8 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm"
-                  >
-                    <h3 className="text-lg font-bold text-stone-900 mb-1">Prodotti Rilevati</h3>
-                    <p className="text-sm text-stone-500 mb-2">
-                      Controlla e modifica i prodotti prima di aggiungerli alla dispensa.
-                    </p>
-                    {/* Avviso data obbligatoria */}
-                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-5">
-                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-700 font-medium">
-                        La data di scadenza è obbligatoria per tutti i prodotti.
-                      </p>
-                    </div>
-
-                    <div className="space-y-4 mb-6">
-                      {audioParsedProducts.map((product, index) => {
-                        const isInvalid = invalidIndices.has(index);
-                        const isMissingDate = isInvalid && (!product.expirationDate || product.expirationDate.trim() === '');
-                        const isMissingQuantity = isInvalid && product.quantity === '';
-                        const isMissingUnit = isInvalid && product.unit === '';
-                        
-                        return (
-                          <div
-                            key={index}
-                            className={cn(
-                              'bg-stone-50 border rounded-xl p-4 relative group transition-colors',
-                              isInvalid ? 'border-red-400 bg-red-50/30' : 'border-stone-200'
-                            )}
-                          >
-                            <button
-                              onClick={() => handleRemoveAudioProduct(index)}
-                              className="absolute -top-2 -right-2 bg-white border border-stone-200 text-red-500 rounded-full p-1.5 shadow-sm hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                              <div>
-                                <label className="block text-xs font-medium text-stone-500 mb-1 flex items-center gap-1">
-                                  Nome
-                                  {product.isEstimate && (
-                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wider" title="Dati stimati dall'AI">
-                                      <Sparkles className="w-2.5 h-2.5" /> Stima
-                                    </span>
-                                  )}
-                                </label>
-                                <input type="text" value={product.name}
-                                  onChange={(e) => handleUpdateAudioProduct(index, 'name', e.target.value)}
-                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium text-stone-500 mb-1">Categoria</label>
-                                <select value={product.category || 'Altro'}
-                                  onChange={(e) => handleUpdateAudioProduct(index, 'category', e.target.value)}
-                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
-                                >
-                                  {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat} {CATEGORY_EMOJIS[cat]}</option>)}
-                                </select>
-                              </div>
-                            </div>
-                            <div className="flex gap-3">
-                              <div className="flex-1">
-                                <label className={cn(
-                                  'block text-xs font-medium mb-1',
-                                  isMissingQuantity ? 'text-red-600' : 'text-stone-500'
-                                )}>
-                                  Quantità {isMissingQuantity && <span className="font-bold">*</span>}
-                                </label>
-                                <input type="number" min="0.1" step="0.1" value={product.quantity}
-                                  onChange={(e) => handleUpdateAudioProduct(index, 'quantity', e.target.value ? Number(e.target.value) : '')}
-                                  className={cn(
-                                    'w-full bg-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-sm border',
-                                    isMissingQuantity
-                                      ? 'border-red-400 focus:ring-red-400 bg-red-50'
-                                      : 'border-stone-200 focus:ring-emerald-500'
-                                  )}
-                                />
-                              </div>
-                              <div className="w-1/3">
-                                <label className={cn(
-                                  'block text-xs font-medium mb-1',
-                                  isMissingUnit ? 'text-red-600' : 'text-stone-500'
-                                )}>
-                                  Unità {isMissingUnit && <span className="font-bold">*</span>}
-                                </label>
-                                <select value={product.unit}
-                                  onChange={(e) => handleUpdateAudioProduct(index, 'unit', e.target.value)}
-                                  className={cn(
-                                    'w-full bg-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-sm appearance-none border',
-                                    isMissingUnit
-                                      ? 'border-red-400 focus:ring-red-400 bg-red-50'
-                                      : 'border-stone-200 focus:ring-emerald-500'
-                                  )}
-                                >
-                                  <option value="" disabled>Seleziona...</option>
-                                  {PRODUCT_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                                </select>
-                              </div>
-                              <div className="flex-1">
-                                <label className={cn(
-                                  'block text-xs font-medium mb-1',
-                                  isMissingDate ? 'text-red-600' : 'text-stone-500'
-                                )}>
-                                  Scadenza {isMissingDate && <span className="font-bold">*obbligatoria</span>}
-                                </label>
-                                <input
-                                  type="date"
-                                  value={product.expirationDate || ''}
-                                  onChange={(e) => handleUpdateAudioProduct(index, 'expirationDate', e.target.value)}
-                                  className={cn(
-                                    'w-full bg-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-sm border',
-                                    isMissingDate
-                                      ? 'border-red-400 focus:ring-red-400 bg-red-50'
-                                      : 'border-stone-200 focus:ring-emerald-500'
-                                  )}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => { setAudioParsedProducts(null); setInvalidIndices(new Set()); }}
-                        className="flex-1 py-3 px-4 text-sm font-medium text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors"
-                      >
-                        Annulla
-                      </button>
-                      <button
-                        onClick={handleConfirmAudioProducts}
-                        className="flex-[2] py-3 px-4 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-sm"
-                      >
-                        <Check className="w-5 h-5" />
-                        Conferma e Aggiungi ({audioParsedProducts.length})
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Dev test button */}
-                <div className="mt-8 pt-6 border-t border-stone-200">
-                  <button type="button"
-                    onClick={() => addRandomProducts(setProducts, () => {
-                      toast.success('Prodotti di test aggiunti!');
-                    })}
-                    className="w-full bg-amber-100 text-amber-800 border border-amber-300 px-4 py-3 rounded-xl font-medium hover:bg-amber-200 active:bg-amber-300 transition-colors flex items-center justify-center gap-2 shadow-sm"
-                  >
-                    <Package className="w-5 h-5" />
-                    Aggiungi Prodotti di Esempio
-                  </button>
-                  <p className="text-xs text-amber-600/80 text-center mt-2">
-                    Aggiunge 10–15 prodotti casuali per testare la dispensa.
-                  </p>
-                </div>
-              </section>
-            </motion.div>
-          )}
-
-          {/* ── Pantry tab ──────────────────────────────────────────────────── */}
-          {activeTab === 'pantry' && (
+    <MainLayout 
+      activeTab={activeTab} 
+      handleTabChange={handleTabChange} 
+      isGenerating={isGenerating} 
+      setShowAddSheet={setShowAddSheet}
+    >
+      <AnimatePresence mode="wait">
+        {/* ── Pantry tab ──────────────────────────────────────────────────── */}
+        {activeTab === 'pantry' && (
+          <React.Suspense fallback={<div className="p-4 sm:p-6"><PantrySkeleton /></div>}>
             <PantryTab
               key="pantry"
-              products={products}
-              groupedProducts={groupedProducts}
-              sortBy={sortBy}
-              setSortBy={setSortBy}
-              setShowClearConfirm={setShowClearConfirm}
-              setActiveTab={handleTabChange}
-              editingProductId={editingProductId}
-              editState={editState}
-              handleEditProduct={handleEditProduct}
-              handleSaveEdit={handleSaveEdit}
-              handleCancelEdit={handleCancelEdit}
-              handleDeleteProduct={handleDeleteProduct}
+              setShowAddSheet={setShowAddSheet}
+              handleConsumeProduct={onConsumeProduct}
+              handleWasteProduct={onWasteProduct}
+              onOpenSettings={() => setShowSettingsModal(true)}
+              pantryLayout={settings.pantryLayout}
             />
-          )}
+          </React.Suspense>
+        )}
 
-          {/* ── Recipe tab ──────────────────────────────────────────────────── */}
-          {activeTab === 'recipe' && (
+        {/* ── Recipe tab ──────────────────────────────────────────────────── */}
+        {activeTab === 'recipe' && (
+          <React.Suspense fallback={<div className="p-4 sm:p-6"><RecipeSkeleton /></div>}>
             <RecipeTab
               key="recipe"
-              products={products}
+              recipes={recipes}
               recipe={recipe}
+              selectedRecipeIndex={selectedRecipeIndex}
+              onSelectRecipe={handleSelectRecipe}
               isGenerating={isGenerating}
               isEditingRecipe={isEditingRecipe}
               setIsEditingRecipe={setIsEditingRecipe}
@@ -699,89 +168,119 @@ export default function App() {
               onConfirmRecipe={onConfirmRecipe}
               onEditedQuantityChange={handleEditedQuantityChange}
             />
-          )}
-
-        </AnimatePresence>
-      </main>
-
-      {/* Mobile bottom nav */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-stone-200/50 flex justify-around items-center h-16 px-2 z-50 pb-safe">
-        <button
-          onClick={() => handleTabChange('pantry')}
-          disabled={isGenerating}
-          className={cn(
-            'flex flex-col items-center justify-center w-full h-full space-y-1 transition-all active:scale-95',
-            activeTab === 'pantry' ? 'text-emerald-600' : 'text-stone-500 hover:text-stone-900',
-            isGenerating && 'opacity-50 cursor-not-allowed',
-          )}
-        >
-          <Package className={cn('w-6 h-6', activeTab === 'pantry' && 'fill-emerald-50')} />
-          <span className="text-[10px] font-medium">Dispensa</span>
-        </button>
-
-        <button
-          onClick={() => handleTabChange('add')}
-          disabled={isGenerating}
-          className={cn('relative -top-5 flex flex-col items-center justify-center', isGenerating && 'opacity-50 cursor-not-allowed')}
-        >
-          <div className={cn(
-            'w-14 h-14 rounded-full flex items-center justify-center shadow-lg text-white transition-transform active:scale-90',
-            activeTab === 'add' ? 'bg-emerald-600' : 'bg-emerald-500',
-          )}>
-            <Plus className="w-7 h-7" />
-          </div>
-        </button>
-
-        <button
-          onClick={() => handleTabChange('recipe')}
-          disabled={isGenerating}
-          className={cn(
-            'flex flex-col items-center justify-center w-full h-full space-y-1 transition-all active:scale-95',
-            activeTab === 'recipe' ? 'text-emerald-600' : 'text-stone-500 hover:text-stone-900',
-            isGenerating && 'opacity-50 cursor-not-allowed',
-          )}
-        >
-          <Utensils className={cn('w-6 h-6', activeTab === 'recipe' && 'fill-emerald-50')} />
-          <span className="text-[10px] font-medium">Ricette</span>
-        </button>
-      </nav>
-
-      {/* Modals & toast */}
-      <AnimatePresence>
-        {(isRecording || isAnalyzingAudio) && (
-          <ListeningModal
-            key="listening"
-            isRecording={isRecording}
-            isAnalyzingAudio={isAnalyzingAudio}
-            onStop={stopRecording}
-          />
+          </React.Suspense>
         )}
-        {isScanningBarcode && (
-          <BarcodeScannerModal
-            key="barcode"
-            onClose={() => setIsScanningBarcode(false)}
-            onScan={handleBarcodeScan}
-          />
+
+        {/* ── Stats tab ───────────────────────────────────────────────────── */}
+        {activeTab === 'stats' && (
+          <React.Suspense fallback={<div className="p-4 sm:p-6"><StatsSkeleton /></div>}>
+            <StatsTab
+              key="stats"
+              stats={stats}
+            />
+          </React.Suspense>
         )}
-        {showClearConfirm && (
-          <ClearConfirmModal
-            key="clear"
-            onConfirm={clearProducts}
-            onCancel={() => setShowClearConfirm(false)}
-          />
-        )}
-        {showPreferencesModal && (
-          <PreferencesModal
-            key="preferences"
-            mealType={selectedMealType}
-            isGenerating={isGenerating}
-            onConfirm={(servings, useMicrowave, useAirFryer, preferences) => {
-              handleGenerateRecipe(sortedProducts, servings, useMicrowave, useAirFryer, preferences, (msg) => toast.error(msg));
-            }}
-            onCancel={() => setShowPreferencesModal(false)}
-          />
+
+        {/* ── Settings tab ────────────────────────────────────────────────── */}
+        {activeTab === 'settings' && (
+          <React.Suspense fallback={<div className="p-4 sm:p-6"><SettingsSkeleton /></div>}>
+            <SettingsTab
+              key="settings"
+              settings={settings}
+              onUpdate={updateSettings}
+            />
+          </React.Suspense>
         )}
       </AnimatePresence>
-    </div>
+
+      {/* Modals & toast */}
+      <React.Suspense fallback={null}>
+        <AddProductModal
+          isOpen={showAddSheet}
+          onClose={() => setShowAddSheet(false)}
+          isScanningBarcode={isScanningBarcode}
+          setIsScanningBarcode={setIsScanningBarcode}
+          isRecording={isRecording}
+          isAnalyzingAudio={isAnalyzingAudio}
+          isFetchingBarcode={isFetchingBarcode}
+          isAnalyzingReceipt={isAnalyzingReceipt}
+          startRecording={startRecording}
+          stopRecording={stopRecording}
+          cameraInputRef={cameraInputRef}
+          galleryInputRef={galleryInputRef}
+          handleReceiptUpload={handleReceiptUpload}
+          setIsReceiptModalOpen={setIsReceiptModalOpen}
+          scannedProductName={scannedProductName}
+          setScannedProductName={setScannedProductName}
+          addProduct={addProduct}
+          addProducts={addProducts}
+          isCategorizing={isCategorizing}
+          audioParsedProducts={audioParsedProducts}
+          setAudioParsedProducts={setAudioParsedProducts}
+          invalidIndices={invalidIndices}
+          setInvalidIndices={setInvalidIndices}
+          products={products}
+        />
+      </React.Suspense>
+
+      <ModalsContainer
+        isReceiptModalOpen={isReceiptModalOpen}
+        setIsReceiptModalOpen={setIsReceiptModalOpen}
+        cameraInputRef={cameraInputRef}
+        galleryInputRef={galleryInputRef}
+        isRecording={isRecording}
+        isAnalyzingAudio={isAnalyzingAudio}
+        stopRecording={stopRecording}
+        isScanningBarcode={isScanningBarcode}
+        setIsScanningBarcode={setIsScanningBarcode}
+        handleBarcodeScan={handleBarcodeScan}
+        showClearConfirm={showClearConfirm}
+        clearProducts={clearProducts}
+        setShowClearConfirm={setShowClearConfirm}
+        showPreferencesModal={showPreferencesModal}
+        selectedMealType={selectedMealType}
+        isGenerating={isGenerating}
+        handleGenerateRecipe={(servings, useMicrowave, useAirFryer, preferences, numberOfRecipes) => {
+          const combinedPreferences = [
+            settings.diets?.length ? `Diete: ${settings.diets.join(', ')}` : '',
+            settings.intolerances ? `Intolleranze: ${settings.intolerances}` : '',
+            preferences ? `Preferenze utente: ${preferences}` : ''
+          ].filter(Boolean).join('. ');
+
+          handleGenerateRecipe(sortedProducts, servings, useMicrowave, useAirFryer, combinedPreferences, numberOfRecipes, (msg) => toast.error(msg));
+        }}
+        setShowPreferencesModal={setShowPreferencesModal}
+        showSettingsModal={showSettingsModal}
+        settings={settings}
+        updateSettings={updateSettings}
+        setShowSettingsModal={setShowSettingsModal}
+      />
+    </MainLayout>
   );
+}
+
+function MainApp() {
+  return (
+    <ProductsProvider>
+      <MainAppContent />
+    </ProductsProvider>
+  );
+}
+
+export default function App() {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-stone-100 dark:bg-stone-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-600 dark:text-emerald-400" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return <MainApp />;
 }

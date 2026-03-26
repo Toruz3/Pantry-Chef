@@ -13,6 +13,7 @@ interface BarcodeScannerModalProps {
 export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModalProps, 'isOpen'>) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [isStarting, setIsStarting] = useState(true);
+  const lastScannedRef = useRef<{ text: string; time: number } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -30,9 +31,14 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
           },
           (decodedText) => {
             if (scannerRef.current && mounted) {
-              scannerRef.current.stop().then(() => {
+              const now = Date.now();
+              const last = lastScannedRef.current;
+              
+              // Prevent scanning the same barcode within 3 seconds
+              if (!last || last.text !== decodedText || (now - last.time > 3000)) {
+                lastScannedRef.current = { text: decodedText, time: now };
                 onScan(decodedText);
-              }).catch(console.error);
+              }
             }
           },
           (errorMessage) => {
@@ -68,7 +74,7 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex flex-col bg-black/95 backdrop-blur-sm"
     >
       <div className="flex items-center justify-between p-4 text-white">
           <h3 className="text-lg font-medium flex items-center gap-2">
@@ -97,7 +103,7 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
             />
           </div>
           <p className="text-white/60 text-center mt-8 text-sm max-w-xs">
-            Inquadra il codice a barre del prodotto. La scansione avverrà automaticamente.
+            Inquadra il codice a barre del prodotto. Puoi scansionare più prodotti consecutivamente.
           </p>
         </div>
     </motion.div>

@@ -39,9 +39,9 @@ const SAMPLE_PRODUCTS: SampleProductDef[] = [
   { name: 'Cioccolato', category: 'Snack e Dolci', units: ['g', 'pz'] },
 ];
 
-export const addRandomProducts = (setProducts: React.Dispatch<React.SetStateAction<Product[]>>, onSuccess?: () => void) => {
+export const addRandomProducts = (addProducts: (products: Omit<Product, 'id'>[]) => void, currentProducts: Product[], onSuccess?: () => void) => {
   const numProducts = Math.floor(Math.random() * 6) + 10; // 10 to 15
-  const newRandomProducts: Product[] = [];
+  const newRandomProducts: Omit<Product, 'id'>[] = [];
   
   // Shuffle the sample products to avoid duplicates
   const shuffledSamples = [...SAMPLE_PRODUCTS].sort(() => 0.5 - Math.random());
@@ -61,22 +61,21 @@ export const addRandomProducts = (setProducts: React.Dispatch<React.SetStateActi
     const formattedDate = format(randomDate, 'yyyy-MM-dd', { locale: it });
 
     newRandomProducts.push({
-      id: uuidv4(),
       name: sample.name,
-      category: sample.category,
+      category: sample.category as any,
       expirationDate: formattedDate,
       quantity: finalQuantity,
       unit: randomUnit,
+      location: 'dispensa',
       createdAt: Date.now() - Math.floor(Math.random() * 10000000),
     });
   }
 
-  setProducts(prev => {
-    // Prevent duplicates with existing products by name
-    const existingNames = new Set(prev.map(p => p.name.toLowerCase()));
-    const uniqueNewProducts = newRandomProducts.filter(p => !existingNames.has(p.name.toLowerCase()));
-    return [...prev, ...uniqueNewProducts];
-  });
+  // Prevent duplicates with existing products by name
+  const existingNames = new Set(currentProducts.map(p => p.name.toLowerCase()));
+  const uniqueNewProducts = newRandomProducts.filter(p => !existingNames.has(p.name.toLowerCase()));
+  
+  addProducts(uniqueNewProducts);
   
   if (onSuccess) onSuccess();
 };

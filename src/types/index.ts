@@ -1,11 +1,14 @@
 export interface Product {
   id: string;
+  householdId?: string;
   name: string;
   expirationDate: string; // YYYY-MM-DD
   quantity: number;
   unit: string;
   category?: string;
+  location?: string;
   createdAt?: number;
+  addedAt?: string;
   imageUrl?: string;
   isEstimate?: boolean;
 }
@@ -48,6 +51,37 @@ export interface GeneratedRecipe {
   servings: number;
   usedProducts: UsedProduct[];
   imageUrl?: string;
+}
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlockedAt?: number;
+}
+
+export interface WeeklyChallenge {
+  id: string;
+  title: string;
+  description: string;
+  target: number;
+  progress: number;
+  xpReward: number;
+  isCompleted: boolean;
+  expiresAt: number; // timestamp
+}
+
+export interface UserStats {
+  itemsConsumed: number;
+  itemsWasted: number;
+  currentStreak: number;
+  bestStreak: number;
+  lastActionDate: string | null;
+  badges: Badge[];
+  weeklyChallenges?: WeeklyChallenge[];
+  moneySaved?: number;
+  wasteByCategory?: Record<string, number>;
 }
 
 export const CATEGORIES = [

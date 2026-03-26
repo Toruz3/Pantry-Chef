@@ -3,8 +3,9 @@ import { Product, GeneratedRecipe } from '../types';
 import { generateRecipe } from '../services/gemini';
 import { haptics } from '../utils/haptics';
 
-export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Product[]>>) {
-  const [recipe, setRecipe]                 = useState<GeneratedRecipe | null>(null);
+export function useRecipe(consumeProducts: (usedProducts: { productId: string; quantity: number }[]) => Promise<void>) {
+  const [recipes, setRecipes]                 = useState<GeneratedRecipe[] | null>(null);
+  const [selectedRecipeIndex, setSelectedRecipeIndex] = useState<number>(0);
   const [isGenerating, setIsGenerating]     = useState(false);
   const [isEditingRecipe, setIsEditingRecipe] = useState(false);
   const [isRecipeConfirmed, setIsRecipeConfirmed] = useState(false);
@@ -25,7 +26,8 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
     servings: number,
     useMicrowave: boolean,
     useAirFryer: boolean,
-    userPreferences: string,          // ← now a real parameter, not stale state
+    userPreferences: string,
+    numberOfRecipes: number,
     setError: (msg: string) => void
   ) => {
     if (!selectedMealType) return;
@@ -33,7 +35,8 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
     haptics.medium();
     setShowPreferencesModal(false);
     setIsGenerating(true);
-    setRecipe(null);
+    setRecipes(null);
+    setSelectedRecipeIndex(0);
     setIsRecipeConfirmed(false);
 
     try {
@@ -43,10 +46,11 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
         selectedMealType,
         { microwave: useMicrowave, airFryer: useAirFryer },
         userPreferences,
+        numberOfRecipes,
         false
       );
-      setRecipe(generated);
-      setEditedUsedProducts(generated.usedProducts || []);
+      setRecipes(generated);
+      setEditedUsedProducts(generated[0]?.usedProducts || []);
       setIsEditingRecipe(false);
       haptics.success();
     } catch (err: any) {
@@ -58,23 +62,18 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
     }
   };
 
-  const handleConfirmRecipe = () => {
-    if (!recipe || isRecipeConfirmed) return;
+  const handleSelectRecipe = (index: number) => {
+    if (!recipes || !recipes[index]) return;
+    setSelectedRecipeIndex(index);
+    setEditedUsedProducts(recipes[index].usedProducts || []);
+    setIsEditingRecipe(false);
+  };
+
+  const handleConfirmRecipe = async () => {
+    if (!recipes || isRecipeConfirmed) return;
 
     haptics.success();
-    setProducts(prev => {
-      const updated = [...prev];
-      editedUsedProducts.forEach(usedItem => {
-        const idx = updated.findIndex(p => p.id === usedItem.productId);
-        if (idx !== -1) {
-          const newQty = updated[idx].quantity - usedItem.quantity;
-          if (newQty <= 0) updated.splice(idx, 1);
-          else updated[idx] = { ...updated[idx], quantity: newQty };
-        }
-      });
-      return updated;
-    });
-
+    await consumeProducts(editedUsedProducts);
     setIsRecipeConfirmed(true);
   };
 
@@ -86,7 +85,9 @@ export function useRecipe(setProducts: React.Dispatch<React.SetStateAction<Produ
   };
 
   return {
-    recipe, setRecipe,
+    recipes, setRecipes,
+    selectedRecipeIndex, handleSelectRecipe,
+    recipe: recipes ? recipes[selectedRecipeIndex] : null,
     isGenerating,
     isEditingRecipe, setIsEditingRecipe,
     isRecipeConfirmed,

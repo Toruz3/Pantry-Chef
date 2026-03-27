@@ -56,17 +56,34 @@ export function AddProductModal({
   products
 }: AddProductModalProps) {
 
+  const [keyboardOffset, setKeyboardOffset] = React.useState(0);
+
   // Prevent background scrolling when modal is open
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+      const scrollY = window.scrollY;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      return () => {
+        document.body.style.position = '';
+        document.body.style.top = '';
+        window.scrollTo(0, scrollY);
+      };
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
+
+  useEffect(() => {
+    const handler = () => {
+      const viewport = window.visualViewport;
+      if (viewport) {
+        const offset = window.innerHeight - viewport.height;
+        setKeyboardOffset(offset);
+      }
+    };
+    window.visualViewport?.addEventListener('resize', handler);
+    return () => window.visualViewport?.removeEventListener('resize', handler);
+  }, []);
 
   const handleConfirmAudioProducts = () => {
     if (!audioParsedProducts) return;
@@ -153,8 +170,20 @@ export function AddProductModal({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            drag="y"
+            dragConstraints={{ top: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(_, info) => {
+              if (info.offset.y > 100 || info.velocity.y > 500) onClose();
+            }}
+            style={{ paddingBottom: keyboardOffset }}
             className="fixed inset-x-0 bottom-0 z-[70] bg-stone-50 dark:bg-stone-950 rounded-t-3xl shadow-2xl border-t border-stone-200 dark:border-stone-800 h-[90vh] flex flex-col sm:max-w-2xl sm:mx-auto sm:h-[85vh] sm:rounded-3xl sm:bottom-6 sm:border"
           >
+            {/* Drag handle visuale */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 bg-stone-300 dark:bg-stone-700 rounded-full" />
+            </div>
+
             {/* Header */}
             <div className="flex items-center justify-between p-4 sm:p-6 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-t-3xl shrink-0">
               <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">Aggiungi Prodotto</h2>
@@ -179,7 +208,7 @@ export function AddProductModal({
                   >
                     {isFetchingBarcode ? <Loader2 className="w-7 h-7 animate-spin" /> : <Barcode className="w-7 h-7" />}
                     <div className="flex flex-col items-center">
-                      <span className="text-sm font-semibold">{isFetchingBarcode ? 'Ricerca…' : 'Scansiona'}</span>
+                      <span className="text-sm font-semibold">{isFetchingBarcode ? 'Ricerca…' : 'Scansiona Prodotto'}</span>
                       <span className="text-[10px] opacity-80 mt-0.5">Codice a barre</span>
                     </div>
                   </button>

@@ -7,6 +7,8 @@ import { GroupedVirtuoso, GroupedVirtuosoHandle } from 'react-virtuoso';
 import { Product, CATEGORIES, CATEGORY_EMOJIS } from '../../types';
 import { SortOption, SORT_OPTIONS } from '../../constants/sortOptions';
 import { ProductCard } from './ProductCard';
+import { ProductActionSheet } from './ProductActionSheet';
+import { PantrySkeleton } from '../ui/Skeleton';
 import { cn } from '../../lib/utils';
 
 import { useProductsContext } from '../../contexts/ProductsContext';
@@ -29,6 +31,7 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
     products, groupedProducts, sortBy, setSortBy,
     setShowClearConfirm, editingProductId,
     handleEditProduct, handleSaveEdit, handleCancelEdit, handleDeleteProduct,
+    isLoading,
   } = useProductsContext();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,6 +42,9 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchActionConfirm, setBatchActionConfirm] = useState<'consume' | 'waste' | 'delete' | null>(null);
+
+  const [actionSheetProduct, setActionSheetProduct] = useState<Product | null>(null);
+  const [actionSheetType, setActionSheetType] = useState<'consume' | 'waste' | null>(null);
 
   const toggleSelectionMode = () => {
     setIsSelectionMode(!isSelectionMode);
@@ -351,7 +357,11 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
           </div>
         )}
 
-        {products.length === 0 ? (
+        {isLoading ? (
+          <div className="mt-8">
+            <PantrySkeleton />
+          </div>
+        ) : products.length === 0 ? (
           <div className="text-center py-16 px-4 text-stone-500 dark:text-stone-400 border-2 border-dashed border-stone-200 dark:border-stone-800 rounded-2xl bg-stone-50/50 dark:bg-stone-900/50 flex flex-col items-center justify-center">
             <div className="relative w-32 h-32 mb-6">
               <svg viewBox="0 0 100 100" className="w-full h-full text-stone-300 dark:text-stone-700" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -404,8 +414,10 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
                     product={product}
                     onEdit={handleEditProduct}
                     onDelete={handleDeleteProduct}
-                    onConsume={handleConsumeProduct}
-                    onWaste={handleWasteProduct}
+                    onAction={(action) => {
+                      setActionSheetProduct(product);
+                      setActionSheetType(action);
+                    }}
                     isEditing={editingProductId === product.id}
                     onSaveEdit={handleSaveEdit}
                     onCancelEdit={handleCancelEdit}
@@ -478,6 +490,22 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
           )}
         </AnimatePresence>
       </section>
+
+      <ProductActionSheet
+        product={actionSheetProduct}
+        action={actionSheetType}
+        onClose={() => {
+          setActionSheetProduct(null);
+          setActionSheetType(null);
+        }}
+        onConfirm={(id, qty) => {
+          if (actionSheetType === 'consume') {
+            handleConsumeProduct(id, qty);
+          } else if (actionSheetType === 'waste') {
+            handleWasteProduct(id, qty);
+          }
+        }}
+      />
     </motion.div>
   );
 });

@@ -2,6 +2,7 @@ import React from 'react';
 import { Toaster, ToastBar } from 'react-hot-toast';
 import { Header } from './Header';
 import { BottomNav } from '../BottomNav';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -12,8 +13,15 @@ interface MainLayoutProps {
 }
 
 export function MainLayout({ children, activeTab, handleTabChange, isGenerating, setShowAddSheet }: MainLayoutProps) {
+  const isOnline = useOnlineStatus();
+
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 font-sans selection:bg-emerald-200 dark:selection:bg-emerald-900 transition-colors duration-200">
+      {!isOnline && (
+        <div className="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-white text-center py-1.5 text-xs font-bold shadow-md">
+          Modalità offline — le modifiche saranno sincronizzate quando torni online
+        </div>
+      )}
       <Toaster 
         position="bottom-center"
         containerClassName="toast-container !bottom-[calc(5.5rem+env(safe-area-inset-bottom))] sm:!bottom-6"

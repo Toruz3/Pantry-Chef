@@ -15,8 +15,7 @@ interface ProductCardProps {
   onSaveEdit: (id: string, updatedProduct: Partial<Product>) => void;
   onCancelEdit: () => void;
   onDelete: (id: string) => void;
-  onConsume: (id: string, quantity: number) => void;
-  onWaste: (id: string, quantity: number) => void;
+  onAction?: (action: 'consume' | 'waste') => void;
   layout?: 'grid' | 'compact';
   isSelected?: boolean;
   onToggleSelect?: () => void;
@@ -53,8 +52,7 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
     onSaveEdit,
     onCancelEdit,
     onDelete,
-    onConsume,
-    onWaste,
+    onAction,
     layout = 'grid',
     isSelected,
     onToggleSelect,
@@ -66,9 +64,6 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
   const [editQuantity, setEditQuantity] = useState<number | ''>(product.quantity);
   const [editUnit, setEditUnit] = useState(product.unit);
   const [editDate, setEditDate] = useState(product.expirationDate);
-
-  const [actionState, setActionState] = useState<'idle' | 'consume' | 'waste'>('idle');
-  const [actionQuantity, setActionQuantity] = useState<number | ''>(1);
 
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wasLongPressed = useRef(false);
@@ -93,24 +88,6 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
     setTimeout(() => {
       wasLongPressed.current = false;
     }, 100);
-  };
-
-  const handleActionConfirm = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!actionQuantity || actionQuantity <= 0) return;
-    if (actionState === 'consume') {
-      onConsume(product.id, Number(actionQuantity));
-    } else if (actionState === 'waste') {
-      onWaste(product.id, Number(actionQuantity));
-    }
-    setActionState('idle');
-    setActionQuantity(1);
-  };
-
-  const handleActionCancel = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setActionState('idle');
-    setActionQuantity(1);
   };
 
   useEffect(() => {
@@ -358,99 +335,31 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
                 </div>
               </div>
               
-              {actionState === 'idle' && (
-                <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                  <span className={cn(
-                    'hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider whitespace-nowrap',
-                    colorClass,
-                  )}>
-                    {text}
-                  </span>
-                  <div className="flex items-center gap-1 sm:border-l sm:border-stone-200 sm:dark:border-stone-700 sm:pl-3">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionState('consume'); setActionQuantity(1); }}
-                      className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors active:scale-95"
-                      title="Consumato"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionState('waste'); setActionQuantity(1); }}
-                      className="p-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors active:scale-95"
-                      title="Buttato"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            {actionState !== 'idle' && (
-              <div className="flex items-center justify-between gap-2 bg-stone-50 dark:bg-stone-800/50 p-2 rounded-xl border border-stone-200 dark:border-stone-700 mt-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400 hidden sm:inline-block">
-                    {actionState === 'consume' ? 'Consuma' : 'Spreca'}
-                  </span>
-                  <span className="text-[11px] font-bold text-stone-700 dark:text-stone-300 bg-stone-200 dark:bg-stone-700 px-1.5 py-0.5 rounded">
-                    {product.unit}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <span className={cn(
+                  'hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider whitespace-nowrap',
+                  colorClass,
+                )}>
+                  {text}
+                </span>
+                <div className="flex items-center gap-1 sm:border-l sm:border-stone-200 sm:dark:border-stone-700 sm:pl-3">
                   <button
-                    onClick={(e) => { e.stopPropagation(); setActionQuantity(product.quantity); }}
-                    className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-300 bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 dark:hover:bg-stone-600 rounded-lg transition-colors active:scale-95"
+                    onClick={(e) => { e.stopPropagation(); onAction?.('consume'); }}
+                    className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors active:scale-95"
+                    title="Consumato"
                   >
-                    Max
+                    <Check className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); setActionQuantity(Math.max(1, (Number(actionQuantity) || 0) - 1)); }}
-                    className="p-1.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors active:scale-95 shadow-sm"
-                    aria-label="Diminuisci quantità"
+                    onClick={(e) => { e.stopPropagation(); onAction?.('waste'); }}
+                    className="p-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors active:scale-95"
+                    title="Buttato"
                   >
-                    <Minus className="w-3.5 h-3.5" />
+                    <Trash2 className="w-4 h-4" />
                   </button>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    inputMode="numeric"
-                    value={actionQuantity}
-                    onChange={(e) => setActionQuantity(e.target.value ? Number(e.target.value) : '')}
-                    className="w-14 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-1 py-1.5 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Quantità"
-                  />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setActionQuantity((Number(actionQuantity) || 0) + 1); }}
-                    className="p-1.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors active:scale-95 shadow-sm"
-                    aria-label="Aumenta quantità"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="flex items-center gap-1 ml-1 border-l border-stone-200 dark:border-stone-700 pl-2">
-                    <button
-                      onClick={handleActionCancel}
-                      className="p-1.5 text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-lg transition-colors"
-                      aria-label="Annulla azione"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleActionConfirm}
-                      disabled={!actionQuantity || actionQuantity <= 0}
-                      className={cn(
-                        "p-1.5 text-white rounded-lg transition-colors disabled:opacity-50 active:scale-95 shadow-sm",
-                        actionState === 'consume' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
-                      )}
-                      aria-label="Conferma azione"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                  </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         ) : (
           <div className="p-4 sm:p-5 flex flex-col h-full">
@@ -509,81 +418,20 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
 
             {/* Actions */}
             <div className="mt-auto">
-              {actionState !== 'idle' ? (
-                <div className="flex flex-col gap-2 bg-stone-50 dark:bg-stone-800/50 p-2 rounded-xl border border-stone-200 dark:border-stone-700">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                      {actionState === 'consume' ? 'Quantità consumata' : 'Quantità buttata'}
-                    </span>
-                    <span className="text-[11px] font-bold text-stone-700 dark:text-stone-300 bg-stone-200 dark:bg-stone-700 px-1.5 py-0.5 rounded">
-                      {product.unit}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionQuantity(Math.max(1, (Number(actionQuantity) || 0) - 1)); }}
-                      className="p-2.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors active:scale-95 shadow-sm"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      inputMode="numeric"
-                      value={actionQuantity}
-                      onChange={(e) => setActionQuantity(e.target.value ? Number(e.target.value) : '')}
-                      className="flex-1 min-w-0 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg px-2 py-2 text-base font-bold text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionQuantity((Number(actionQuantity) || 0) + 1); }}
-                      className="p-2.5 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors active:scale-95 shadow-sm"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActionQuantity(product.quantity); }}
-                      className="px-3 py-2.5 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700 rounded-lg transition-colors active:scale-95 shadow-sm text-xs font-bold whitespace-nowrap"
-                    >
-                      Tutto
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <button
-                      onClick={handleActionCancel}
-                      className="flex-1 flex items-center justify-center gap-1.5 p-2 text-stone-600 dark:text-stone-400 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-lg transition-colors text-xs font-bold active:scale-95 shadow-sm"
-                    >
-                      <X className="w-3.5 h-3.5" /> Annulla
-                    </button>
-                    <button
-                      onClick={handleActionConfirm}
-                      disabled={!actionQuantity || actionQuantity <= 0}
-                      className={cn(
-                        "flex-1 flex items-center justify-center gap-1.5 p-2 text-white rounded-lg transition-colors text-xs font-bold disabled:opacity-50 active:scale-95 shadow-sm",
-                        actionState === 'consume' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700"
-                      )}
-                    >
-                      <Check className="w-3.5 h-3.5" /> Conferma
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setActionState('consume'); setActionQuantity(1); }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors text-xs font-bold active:scale-95"
-                  >
-                    <Check className="w-3.5 h-3.5" /> Consumato
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setActionState('waste'); setActionQuantity(1); }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-xs font-bold active:scale-95"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Buttato
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAction?.('consume'); }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors text-xs font-bold active:scale-95"
+                >
+                  <Check className="w-3.5 h-3.5" /> Consumato
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAction?.('waste'); }}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors text-xs font-bold active:scale-95"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Buttato
+                </button>
+              </div>
             </div>
           </div>
         )}

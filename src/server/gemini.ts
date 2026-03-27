@@ -9,7 +9,7 @@ export async function processReceiptImage(base64Image: string, mimeType: string)
   try {
     const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-flash-lite-preview",
       contents: {
         parts: [
           {
@@ -71,7 +71,7 @@ export async function categorizeProduct(productName: string): Promise<Category> 
   try {
     const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-flash-lite-preview",
       contents: `Classifica questo prodotto alimentare: "${productName}". Le categorie consentite sono: 'Latticini', 'Carne e Pesce', 'Frutta e Verdura', 'Dispensa Secca', 'Surgelati', 'Bevande', 'Snack e Dolci', 'Altro'. Restituisci SOLO la categoria esatta come stringa JSON.`,
       config: {
         responseMimeType: "application/json",
@@ -102,7 +102,7 @@ export async function analyzeProductImage(base64Image: string, mimeType: string)
   try {
     const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-flash-lite-preview",
       contents: {
         parts: [
           {
@@ -153,7 +153,7 @@ export async function transcribeAudio(base64Audio: string, mimeType: string): Pr
   try {
     const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-flash-lite-preview",
       contents: {
         parts: [
           {
@@ -183,7 +183,7 @@ export async function analyzeAudioProducts(base64Audio: string, mimeType: string
   try {
     const ai = new GoogleGenAI({ apiKey: getApiKey() });
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-flash-lite-preview",
       contents: {
         parts: [
           {
@@ -349,7 +349,7 @@ Restituisci un array di ${numberOfRecipes} ricette come oggetto JSON con la segu
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-flash-lite-preview",
       contents: prompt,
       config: {
         responseMimeType: "application/json",

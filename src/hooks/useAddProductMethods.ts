@@ -23,10 +23,11 @@ export function useAddProductMethods() {
   const audioChunksRef = useRef<BlobPart[]>([]);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const pendingBarcodes = useRef<Set<string>>(new Set());
 
   const handleBarcodeScan = async (barcode: string) => {
-    // Do not close the scanner immediately
-    // setIsScanningBarcode(false);
+    if (pendingBarcodes.current.has(barcode)) return;
+    pendingBarcodes.current.add(barcode);
     setIsFetchingBarcode(true);
     
     try {
@@ -71,6 +72,7 @@ export function useAddProductMethods() {
       toast.error("Errore durante la ricerca del prodotto.");
     } finally {
       setIsFetchingBarcode(false);
+      pendingBarcodes.current.delete(barcode);
     }
   };
 

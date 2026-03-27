@@ -10,18 +10,23 @@ import { SortOption } from '../constants/sortOptions';
 import { PRODUCT_UNITS } from '../constants/units';
 import { categorizeProduct } from '../services/gemini';
 import { haptics } from '../utils/haptics';
+import { showUndoToast } from '../utils/undoToast';
+import { useProductFilters } from './useProductFilters';
 import toast from 'react-hot-toast';
 
 export function useProducts() {
   const { householdId } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!householdId) {
       setProducts([]);
+      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
     const q = query(collection(db, 'products'), where('householdId', '==', householdId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const loadedProducts: Product[] = [];
@@ -29,60 +34,21 @@ export function useProducts() {
         loadedProducts.push({ id: doc.id, ...doc.data() } as Product);
       });
       setProducts(loadedProducts);
+      setIsLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'products');
+      setIsLoading(false);
     });
 
     return () => unsubscribe();
   }, [householdId]);
 
-  const [sortBy, setSortBy] = useState<SortOption>(SortOption.ExpiryAsc);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isCategorizing, setIsCategorizing] = useState(false);
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
-  const sortedProducts = useMemo(() => {
-    return [...products].sort((a, b) => {
-      const dateA = new Date(a.expirationDate).getTime();
-      const dateB = new Date(b.expirationDate).getTime();
-      
-      switch (sortBy) {
-        case SortOption.ExpiryAsc:
-          return dateA - dateB;
-        case SortOption.ExpiryDesc:
-          return dateB - dateA;
-        case SortOption.AddedDesc:
-          return (b.createdAt || 0) - (a.createdAt || 0);
-        case SortOption.AddedAsc:
-          return (a.createdAt || 0) - (b.createdAt || 0);
-        case SortOption.QtyDesc:
-          return b.quantity - a.quantity;
-        case SortOption.QtyAsc:
-          return a.quantity - b.quantity;
-        case SortOption.NameAsc:
-          return a.name.localeCompare(b.name);
-        case SortOption.NameDesc:
-          return b.name.localeCompare(a.name);
-        default:
-          return dateA - dateB;
-      }
-    });
-  }, [products, sortBy]);
-
-  const groupedProducts = useMemo(() => {
-    const groups: Record<string, Product[]> = {};
-    CATEGORIES.forEach(cat => {
-      groups[cat] = [];
-    });
-    
-    sortedProducts.forEach(product => {
-      const cat = product.category && CATEGORIES.includes(product.category as Category) ? product.category : 'Altro';
-      groups[cat].push(product);
-    });
-    
-    return groups;
-  }, [sortedProducts]);
+  const { sortBy, setSortBy, sortedProducts, groupedProducts } = useProductFilters(products);
 
   const addProduct = async (
     productData: {
@@ -181,25 +147,13 @@ export function useProducts() {
     const productToDelete = products.find(p => p.id === id);
     if (!productToDelete) return;
 
-    toast((t) => (
-      <div className="flex items-center justify-between w-full gap-4">
-        <span>Prodotto eliminato</span>
-        <button
-          onClick={async () => {
-            toast.dismiss(t.id);
-            try {
-              await setDoc(doc(db, 'products', id), productToDelete);
-              toast.success('Azione annullata', { duration: 2000 });
-            } catch (error) {
-              handleFirestoreError(error, OperationType.CREATE, `products/${id}`);
-            }
-          }}
-          className="text-emerald-400 hover:text-emerald-300 font-medium text-sm px-2 py-1 rounded-md hover:bg-emerald-400/10 transition-colors"
-        >
-          Annulla
-        </button>
-      </div>
-    ), { duration: 2500 });
+    showUndoToast('Prodotto eliminato', async () => {
+      try {
+        await setDoc(doc(db, 'products', id), productToDelete);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.CREATE, `products/${id}`);
+      }
+    });
 
     try {
       await deleteDoc(doc(db, 'products', id));
@@ -218,29 +172,17 @@ export function useProducts() {
       const newQuantity = product.quantity - quantityToConsume;
       const originalQuantity = product.quantity;
 
-      toast((t) => (
-        <div className="flex items-center justify-between w-full gap-4">
-          <span>Prodotto consumato</span>
-          <button
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                if (newQuantity <= 0) {
-                  await setDoc(doc(db, 'products', id), product);
-                } else {
-                  await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
-                }
-                toast.success('Azione annullata', { duration: 2000 });
-              } catch (error) {
-                handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-              }
-            }}
-            className="text-emerald-400 hover:text-emerald-300 font-medium text-sm px-2 py-1 rounded-md hover:bg-emerald-400/10 transition-colors"
-          >
-            Annulla
-          </button>
-        </div>
-      ), { duration: 2500 });
+      showUndoToast('Prodotto consumato', async () => {
+        try {
+          if (newQuantity <= 0) {
+            await setDoc(doc(db, 'products', id), product);
+          } else {
+            await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+        }
+      });
 
       if (newQuantity <= 0) {
         await deleteDoc(doc(db, 'products', id));
@@ -263,29 +205,17 @@ export function useProducts() {
       const newQuantity = product.quantity - quantityToWaste;
       const originalQuantity = product.quantity;
 
-      toast((t) => (
-        <div className="flex items-center justify-between w-full gap-4">
-          <span>Prodotto buttato</span>
-          <button
-            onClick={async () => {
-              toast.dismiss(t.id);
-              try {
-                if (newQuantity <= 0) {
-                  await setDoc(doc(db, 'products', id), product);
-                } else {
-                  await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
-                }
-                toast.success('Azione annullata', { duration: 2000 });
-              } catch (error) {
-                handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-              }
-            }}
-            className="text-emerald-400 hover:text-emerald-300 font-medium text-sm px-2 py-1 rounded-md hover:bg-emerald-400/10 transition-colors"
-          >
-            Annulla
-          </button>
-        </div>
-      ), { duration: 2500 });
+      showUndoToast('Prodotto buttato', async () => {
+        try {
+          if (newQuantity <= 0) {
+            await setDoc(doc(db, 'products', id), product);
+          } else {
+            await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+        }
+      });
 
       if (newQuantity <= 0) {
         await deleteDoc(doc(db, 'products', id));
@@ -361,6 +291,7 @@ export function useProducts() {
 
   return {
     products,
+    isLoading,
     addProducts,
     sortBy,
     setSortBy,

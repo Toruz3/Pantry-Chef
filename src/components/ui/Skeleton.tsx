@@ -21,9 +21,22 @@ export function PantrySkeleton() {
       </div>
       <div className="space-y-4">
         <Skeleton className="h-6 w-32" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-4 flex flex-col h-[160px]">
+              <div className="flex-1">
+                <Skeleton className="h-5 w-3/4 mb-2" />
+                <Skeleton className="h-4 w-1/2 mb-4" />
+              </div>
+              <Skeleton className="h-1.5 w-full rounded-full mb-4" />
+              <div className="flex items-center justify-between mt-auto">
+                <Skeleton className="h-5 w-16 rounded-full" />
+                <div className="flex gap-1.5">
+                  <Skeleton className="h-8 w-8 rounded-xl" />
+                  <Skeleton className="h-8 w-8 rounded-xl" />
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       </div>

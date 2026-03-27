@@ -66,7 +66,8 @@ export const StatsTab = React.forwardRef<HTMLDivElement, StatsTabProps>(({ stats
   const totalItems = stats.itemsConsumed + stats.itemsWasted;
   const consumeRatio = totalItems > 0 ? (stats.itemsConsumed / totalItems) * 100 : 0;
   
-  const { totalXP, levelNumber, currentLevel, nextLevel, progress, xpNeeded } = useMemo(() => calculateLevelAndXP(stats), [stats]);
+  const xpKey = `${stats.itemsConsumed}-${stats.itemsWasted}-${stats.currentStreak}-${stats.badges.length}`;
+  const { totalXP, levelNumber, currentLevel, nextLevel, progress, xpNeeded } = useMemo(() => calculateLevelAndXP(stats), [xpKey]);
 
   const LevelIcon = currentLevel.icon;
 

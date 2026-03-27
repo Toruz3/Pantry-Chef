@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Product } from '../types';
+import toast from 'react-hot-toast';
 
 interface SampleProductDef {
   name: string;
@@ -39,7 +40,7 @@ const SAMPLE_PRODUCTS: SampleProductDef[] = [
   { name: 'Cioccolato', category: 'Snack e Dolci', units: ['g', 'pz'] },
 ];
 
-export const addRandomProducts = (addProducts: (products: Omit<Product, 'id'>[]) => void, currentProducts: Product[], onSuccess?: () => void) => {
+export const addRandomProducts = async (addProducts: (products: Omit<Product, 'id'>[]) => Promise<void> | void, currentProducts: Product[], onSuccess?: () => void) => {
   const numProducts = Math.floor(Math.random() * 6) + 10; // 10 to 15
   const newRandomProducts: Omit<Product, 'id'>[] = [];
   
@@ -75,7 +76,11 @@ export const addRandomProducts = (addProducts: (products: Omit<Product, 'id'>[])
   const existingNames = new Set(currentProducts.map(p => p.name.toLowerCase()));
   const uniqueNewProducts = newRandomProducts.filter(p => !existingNames.has(p.name.toLowerCase()));
   
-  addProducts(uniqueNewProducts);
-  
-  if (onSuccess) onSuccess();
+  try {
+    await addProducts(uniqueNewProducts);
+    if (onSuccess) onSuccess();
+  } catch (err) {
+    console.error('Errore aggiunta prodotti:', err);
+    toast.error('Errore durante l\'aggiunta dei prodotti di esempio.');
+  }
 };

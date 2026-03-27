@@ -208,21 +208,6 @@ export function AddProductModal({
           </div>
 
           <div className="mt-3">
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="environment" 
-              ref={cameraInputRef}
-              onChange={handleReceiptUpload}
-              className="hidden" 
-            />
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={galleryInputRef}
-              onChange={handleReceiptUpload}
-              className="hidden" 
-            />
             <button type="button"
               onClick={() => setIsReceiptModalOpen(true)}
               disabled={isRecording || isAnalyzingAudio || isFetchingBarcode || isAnalyzingReceipt}

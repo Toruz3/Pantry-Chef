@@ -254,6 +254,7 @@ function MainAppContent() {
         settings={settings}
         updateSettings={updateSettings}
         setShowSettingsModal={setShowSettingsModal}
+        handleReceiptUpload={handleReceiptUpload}
       />
     </MainLayout>
   );

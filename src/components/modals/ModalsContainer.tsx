@@ -32,6 +32,7 @@ interface ModalsContainerProps {
   settings: any;
   updateSettings: (s: any) => void;
   setShowSettingsModal: (v: boolean) => void;
+  handleReceiptUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export function ModalsContainer({
@@ -40,10 +41,26 @@ export function ModalsContainer({
   isScanningBarcode, setIsScanningBarcode, handleBarcodeScan,
   showClearConfirm, clearProducts, setShowClearConfirm,
   showPreferencesModal, selectedMealType, isGenerating, handleGenerateRecipe, setShowPreferencesModal,
-  showSettingsModal, settings, updateSettings, setShowSettingsModal
+  showSettingsModal, settings, updateSettings, setShowSettingsModal,
+  handleReceiptUpload
 }: ModalsContainerProps) {
   return (
     <Suspense fallback={null}>
+      <input 
+        type="file" 
+        accept="image/*" 
+        capture="environment" 
+        ref={cameraInputRef}
+        onChange={handleReceiptUpload}
+        className="hidden" 
+      />
+      <input 
+        type="file" 
+        accept="image/*" 
+        ref={galleryInputRef}
+        onChange={handleReceiptUpload}
+        className="hidden" 
+      />
       <AnimatePresence>
         {isReceiptModalOpen && (
           <ReceiptSourceModal

@@ -53,7 +53,12 @@ export function BottomNav({ activeTab, handleTabChange, isGenerating, setShowAdd
         <button
           onClick={() => setShowAddSheet(true)}
           disabled={isGenerating}
-          className="w-14 h-14 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/30 flex items-center justify-center transition-all active:scale-90 -translate-y-4 disabled:opacity-50"
+          className={cn(
+            "w-14 h-14 bg-emerald-500 hover:bg-emerald-600 text-white",
+            "rounded-full shadow-lg shadow-emerald-500/40",
+            "flex items-center justify-center",
+            "transition-transform active:scale-90 disabled:opacity-50"
+          )}
         >
           <Plus className="w-7 h-7" />
         </button>

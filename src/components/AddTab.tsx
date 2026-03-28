@@ -74,15 +74,21 @@ export function AddProductModal({
   }, [isOpen]);
 
   useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    
     const handler = () => {
-      const viewport = window.visualViewport;
-      if (viewport) {
-        const offset = window.innerHeight - viewport.height;
-        setKeyboardOffset(offset);
-      }
+      // Su iOS il bottom sheet deve spostarsi, non comprimersi
+      const offset = window.innerHeight - viewport.height - viewport.offsetTop;
+      setKeyboardOffset(Math.max(0, offset));
     };
-    window.visualViewport?.addEventListener('resize', handler);
-    return () => window.visualViewport?.removeEventListener('resize', handler);
+    
+    viewport.addEventListener('resize', handler);
+    viewport.addEventListener('scroll', handler);
+    return () => {
+      viewport.removeEventListener('resize', handler);
+      viewport.removeEventListener('scroll', handler);
+    };
   }, []);
 
   const handleConfirmAudioProducts = () => {
@@ -176,8 +182,8 @@ export function AddProductModal({
             onDragEnd={(_, info) => {
               if (info.offset.y > 100 || info.velocity.y > 500) onClose();
             }}
-            style={{ paddingBottom: keyboardOffset }}
-            className="fixed inset-x-0 bottom-0 z-[70] bg-stone-50 dark:bg-stone-950 rounded-t-3xl shadow-2xl border-t border-stone-200 dark:border-stone-800 h-[90vh] flex flex-col sm:max-w-2xl sm:mx-auto sm:h-[85vh] sm:rounded-3xl sm:bottom-6 sm:border"
+            style={{ bottom: keyboardOffset }}
+            className="fixed inset-x-0 z-[70] bg-stone-50 dark:bg-stone-950 rounded-t-3xl shadow-2xl border-t border-stone-200 dark:border-stone-800 h-[90vh] flex flex-col sm:max-w-2xl sm:mx-auto sm:h-[85vh] sm:rounded-3xl sm:border"
           >
             {/* Drag handle visuale */}
             <div className="flex justify-center pt-3 pb-1 shrink-0">

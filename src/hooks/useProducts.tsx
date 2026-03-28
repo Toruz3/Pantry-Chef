@@ -147,6 +147,9 @@ export function useProducts() {
     const productToDelete = products.find(p => p.id === id);
     if (!productToDelete) return;
 
+    // Aggiornamento ottimistico locale
+    setProducts(prev => prev.filter(p => p.id !== id));
+
     showUndoToast('Prodotto eliminato', async () => {
       try {
         await setDoc(doc(db, 'products', id), productToDelete);
@@ -158,6 +161,8 @@ export function useProducts() {
     try {
       await deleteDoc(doc(db, 'products', id));
     } catch (error) {
+      // Rollback in caso di errore
+      setProducts(prev => [...prev, productToDelete]);
       handleFirestoreError(error, OperationType.DELETE, `products/${id}`);
     }
   };
@@ -165,32 +170,49 @@ export function useProducts() {
   const handleConsumeProduct = async (id: string, quantityToConsume: number = 1) => {
     if (!householdId) return;
     haptics.success();
-    try {
-      const product = products.find(p => p.id === id);
-      if (!product) return;
-      
-      const newQuantity = product.quantity - quantityToConsume;
-      const originalQuantity = product.quantity;
+    
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+    
+    const newQuantity = product.quantity - quantityToConsume;
+    const originalQuantity = product.quantity;
 
-      showUndoToast('Prodotto consumato', async () => {
-        try {
-          if (newQuantity <= 0) {
-            await setDoc(doc(db, 'products', id), product);
-          } else {
-            await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+    // Aggiornamento ottimistico locale
+    if (newQuantity <= 0) {
+      setProducts(prev => prev.filter(p => p.id !== id));
+    } else {
+      setProducts(prev => prev.map(p => 
+        p.id === id ? { ...p, quantity: newQuantity } : p
+      ));
+    }
+
+    showUndoToast('Prodotto consumato', async () => {
+      try {
+        if (newQuantity <= 0) {
+          await setDoc(doc(db, 'products', id), product);
+        } else {
+          await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
         }
-      });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+      }
+    });
 
+    try {
       if (newQuantity <= 0) {
         await deleteDoc(doc(db, 'products', id));
       } else {
         await updateDoc(doc(db, 'products', id), { quantity: newQuantity });
       }
-
     } catch (error) {
+      // Rollback in caso di errore
+      if (newQuantity <= 0) {
+        setProducts(prev => [...prev, product]);
+      } else {
+        setProducts(prev => prev.map(p => 
+          p.id === id ? { ...p, quantity: originalQuantity } : p
+        ));
+      }
       handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
     }
   };
@@ -198,42 +220,80 @@ export function useProducts() {
   const handleWasteProduct = async (id: string, quantityToWaste: number = 1) => {
     if (!householdId) return;
     haptics.medium();
-    try {
-      const product = products.find(p => p.id === id);
-      if (!product) return;
-      
-      const newQuantity = product.quantity - quantityToWaste;
-      const originalQuantity = product.quantity;
+    
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+    
+    const newQuantity = product.quantity - quantityToWaste;
+    const originalQuantity = product.quantity;
 
-      showUndoToast('Prodotto buttato', async () => {
-        try {
-          if (newQuantity <= 0) {
-            await setDoc(doc(db, 'products', id), product);
-          } else {
-            await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+    // Aggiornamento ottimistico locale
+    if (newQuantity <= 0) {
+      setProducts(prev => prev.filter(p => p.id !== id));
+    } else {
+      setProducts(prev => prev.map(p => 
+        p.id === id ? { ...p, quantity: newQuantity } : p
+      ));
+    }
+
+    showUndoToast('Prodotto buttato', async () => {
+      try {
+        if (newQuantity <= 0) {
+          await setDoc(doc(db, 'products', id), product);
+        } else {
+          await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
         }
-      });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
+      }
+    });
 
+    try {
       if (newQuantity <= 0) {
         await deleteDoc(doc(db, 'products', id));
       } else {
         await updateDoc(doc(db, 'products', id), { quantity: newQuantity });
       }
-
     } catch (error) {
+      // Rollback in caso di errore
+      if (newQuantity <= 0) {
+        setProducts(prev => [...prev, product]);
+      } else {
+        setProducts(prev => prev.map(p => 
+          p.id === id ? { ...p, quantity: originalQuantity } : p
+        ));
+      }
       handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
     }
   };
 
   const consumeProducts = async (usedProducts: { productId: string; quantity: number }[]) => {
     if (!householdId) return;
+    
+    const originalProducts = [...products];
+    
+    // Aggiornamento ottimistico locale
+    setProducts(prev => {
+      let next = [...prev];
+      for (const usedItem of usedProducts) {
+        const productIndex = next.findIndex(p => p.id === usedItem.productId);
+        if (productIndex !== -1) {
+          const product = next[productIndex];
+          const newQty = product.quantity - usedItem.quantity;
+          if (newQty <= 0) {
+            next.splice(productIndex, 1);
+          } else {
+            next[productIndex] = { ...product, quantity: newQty };
+          }
+        }
+      }
+      return next;
+    });
+
     try {
       const batch = writeBatch(db);
       for (const usedItem of usedProducts) {
-        const product = products.find(p => p.id === usedItem.productId);
+        const product = originalProducts.find(p => p.id === usedItem.productId);
         if (product) {
           const newQty = product.quantity - usedItem.quantity;
           const docRef = doc(db, 'products', product.id);
@@ -246,6 +306,8 @@ export function useProducts() {
       }
       await batch.commit();
     } catch (error) {
+      // Rollback in caso di errore
+      setProducts(originalProducts);
       handleFirestoreError(error, OperationType.UPDATE, 'products');
     }
   };
@@ -258,14 +320,28 @@ export function useProducts() {
     if (!id || !householdId) return;
 
     haptics.success();
+    
+    const originalProduct = products.find(p => p.id === id);
+    if (!originalProduct) return;
+
+    // Aggiornamento ottimistico locale
+    setProducts(prev => prev.map(p => 
+      p.id === id ? { ...p, ...updatedProduct, isEstimate: false } : p
+    ));
+    setEditingProductId(null);
+
     try {
       const productRef = doc(db, 'products', id);
       await updateDoc(productRef, {
         ...updatedProduct,
         isEstimate: false
       });
-      setEditingProductId(null);
     } catch (error) {
+      // Rollback in caso di errore
+      setProducts(prev => prev.map(p => 
+        p.id === id ? originalProduct : p
+      ));
+      setEditingProductId(id);
       handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
     }
   };
@@ -277,14 +353,22 @@ export function useProducts() {
   const clearProducts = async () => {
     if (!householdId) return;
     haptics.heavy();
+    
+    const originalProducts = [...products];
+    
+    // Aggiornamento ottimistico locale
+    setProducts([]);
+    setShowClearConfirm(false);
+
     try {
       const batch = writeBatch(db);
-      products.forEach(p => {
+      originalProducts.forEach(p => {
         batch.delete(doc(db, 'products', p.id));
       });
       await batch.commit();
-      setShowClearConfirm(false);
     } catch (error) {
+      // Rollback in caso di errore
+      setProducts(originalProducts);
       handleFirestoreError(error, OperationType.DELETE, 'products');
     }
   };

@@ -132,9 +132,9 @@ export const StatsTab = React.forwardRef<HTMLDivElement, StatsTabProps>(({ stats
           {activeTab === 'overview' && (
             <motion.div
               key="overview"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
@@ -303,9 +303,9 @@ export const StatsTab = React.forwardRef<HTMLDivElement, StatsTabProps>(({ stats
           {activeTab === 'challenges' && (
             <motion.div
               key="challenges"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
               className="space-y-4"
             >
@@ -370,9 +370,9 @@ export const StatsTab = React.forwardRef<HTMLDivElement, StatsTabProps>(({ stats
           {activeTab === 'badges' && (
             <motion.div
               key="badges"
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 10 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
               <div className="flex items-center justify-between mb-4 px-1">

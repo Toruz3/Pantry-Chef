@@ -10,12 +10,13 @@ import {
   generateRecipe
 } from "./gemini";
 
+const app = express();
+const PORT = 3000;
+
 async function startServer() {
   console.log("Starting server...");
   console.log("GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
   console.log("API_KEY exists:", !!process.env.API_KEY);
-  const app = express();
-  const PORT = 3000;
 
   // Increase payload limit for base64 images/audio
   app.use(express.json({ limit: '50mb' }));
@@ -89,12 +90,17 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    // Vercel handles static files, so we don't need this in production on Vercel
+    // app.use(express.static("dist"));
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (process.env.NODE_ENV !== "production") {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;

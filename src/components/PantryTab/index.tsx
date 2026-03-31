@@ -46,6 +46,8 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
 
   const [actionSheetProduct, setActionSheetProduct] = useState<Product | null>(null);
   const [actionSheetType, setActionSheetType] = useState<'consume' | 'waste' | null>(null);
+  
+  const [activeFilter, setActiveFilter] = useState<'all' | 'expired' | 'soon' | 'fresh'>('all');
 
   const toggleSelectionMode = () => {
     setIsSelectionMode(!isSelectionMode);
@@ -96,7 +98,18 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
     const items: Product[] = [];
 
     CATEGORIES.forEach(category => {
-      const categoryProducts = groupedProducts[category];
+      let categoryProducts = groupedProducts[category] || [];
+      
+      if (activeFilter !== 'all') {
+        categoryProducts = categoryProducts.filter(p => {
+          const d = differenceInDays(parseISO(p.expirationDate), new Date());
+          if (activeFilter === 'expired') return d < 0;
+          if (activeFilter === 'soon') return d >= 0 && d <= 7;
+          if (activeFilter === 'fresh') return d > 7;
+          return true;
+        });
+      }
+
       if (categoryProducts && categoryProducts.length > 0) {
         groups.push(category);
         groupCounts.push(categoryProducts.length);
@@ -105,7 +118,7 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
     });
 
     return { groups, groupCounts, items };
-  }, [groupedProducts]);
+  }, [groupedProducts, activeFilter]);
 
   const handleSearchResultClick = (productId: string) => {
     setSearchQuery('');
@@ -272,9 +285,12 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
         {/* Statistiche rapide */}
         {products.length > 0 && (
           <div className="flex items-stretch gap-2 mb-6">
-            <div className={cn(
-              'flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl transition-colors border',
-              stats.expired > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900/50' : 'bg-stone-50/50 dark:bg-stone-900/50 border-stone-200/50 dark:border-stone-800/50'
+            <button 
+              onClick={() => setActiveFilter(activeFilter === 'expired' ? 'all' : 'expired')}
+              className={cn(
+              'flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl transition-colors border cursor-pointer active:scale-95',
+              stats.expired > 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-100 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/40' : 'bg-stone-50/50 dark:bg-stone-900/50 border-stone-200/50 dark:border-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800',
+              activeFilter === 'expired' && 'ring-2 ring-red-500 ring-offset-1 dark:ring-offset-stone-950'
             )}>
               <div className="flex items-center gap-1 mb-1.5">
                 <AlertTriangle className={cn("w-3.5 h-3.5", stats.expired > 0 ? "text-red-500 dark:text-red-400" : "text-stone-400 dark:text-stone-500")} />
@@ -285,11 +301,14 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
               <p className={cn('text-xl font-bold leading-none', stats.expired > 0 ? 'text-red-600 dark:text-red-400' : 'text-stone-400 dark:text-stone-500')}>
                 {stats.expired}
               </p>
-            </div>
+            </button>
 
-            <div className={cn(
-              'flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl transition-colors border',
-              stats.soon > 0 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/50' : 'bg-stone-50/50 dark:bg-stone-900/50 border-stone-200/50 dark:border-stone-800/50'
+            <button 
+              onClick={() => setActiveFilter(activeFilter === 'soon' ? 'all' : 'soon')}
+              className={cn(
+              'flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl transition-colors border cursor-pointer active:scale-95',
+              stats.soon > 0 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-900/50 hover:bg-amber-100 dark:hover:bg-amber-900/40' : 'bg-stone-50/50 dark:bg-stone-900/50 border-stone-200/50 dark:border-stone-800/50 hover:bg-stone-100 dark:hover:bg-stone-800',
+              activeFilter === 'soon' && 'ring-2 ring-amber-500 ring-offset-1 dark:ring-offset-stone-950'
             )}>
               <div className="flex items-center gap-1 mb-1.5">
                 <Clock className={cn("w-3.5 h-3.5", stats.soon > 0 ? "text-amber-500 dark:text-amber-400" : "text-stone-400 dark:text-stone-500")} />
@@ -300,9 +319,15 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
               <p className={cn('text-xl font-bold leading-none', stats.soon > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-stone-400 dark:text-stone-500')}>
                 {stats.soon}
               </p>
-            </div>
+            </button>
 
-            <div className="flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 transition-colors">
+            <button 
+              onClick={() => setActiveFilter(activeFilter === 'fresh' ? 'all' : 'fresh')}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center py-3 px-1 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 transition-colors cursor-pointer active:scale-95 hover:bg-emerald-100 dark:hover:bg-emerald-900/40",
+                activeFilter === 'fresh' && 'ring-2 ring-emerald-500 ring-offset-1 dark:ring-offset-stone-950'
+              )}
+            >
               <div className="flex items-center gap-1 mb-1.5">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
                 <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
@@ -312,7 +337,7 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
               <p className="text-xl font-bold leading-none text-emerald-600 dark:text-emerald-400">
                 {stats.ok}
               </p>
-            </div>
+            </button>
           </div>
         )}
 

@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc, setDoc, collection, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../firebase';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
+
+export interface User {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -20,78 +23,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
-      setUser(currentUser);
-      
-      if (currentUser) {
-        try {
-          const userRef = doc(db, 'users', currentUser.uid);
-          const userSnap = await getDoc(userRef);
-          
-          if (!userSnap.exists()) {
-            // Create a new household for the user
-            const householdRef = doc(collection(db, 'households'));
-            const newHouseholdId = householdRef.id;
-            
-            await setDoc(householdRef, {
-              name: `Dispensa di ${currentUser.displayName || 'Casa'}`,
-              ownerId: currentUser.uid,
-              members: [currentUser.uid],
-            });
-            
-            // Create the user profile
-            await setDoc(userRef, {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              displayName: currentUser.displayName,
-              currentHouseholdId: newHouseholdId,
-              moneySaved: 0
-            });
-            
-            setHouseholdId(newHouseholdId);
-          } else {
-            const userData = userSnap.data();
-            setHouseholdId(userData.currentHouseholdId);
-            
-            // Listen to changes in currentHouseholdId
-            onSnapshot(userRef, (doc) => {
-              if (doc.exists()) {
-                setHouseholdId(doc.data().currentHouseholdId);
-              }
-            }, (error) => {
-              handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
-            });
-          }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
-        }
+    // Check local storage for existing session
+    const storedUser = localStorage.getItem('local_user');
+    const storedHousehold = localStorage.getItem('local_household');
+    
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+      if (storedHousehold) {
+        setHouseholdId(storedHousehold);
       } else {
-        setHouseholdId(null);
+        const newHouseholdId = `household_${Date.now()}`;
+        setHouseholdId(newHouseholdId);
+        localStorage.setItem('local_household', newHouseholdId);
       }
-      
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
+    }
+    
+    setIsLoading(false);
   }, []);
 
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Error signing in with Google', error);
-      throw error;
-    }
+    // Simulate login
+    const mockUser: User = {
+      uid: `local_user_${Date.now()}`,
+      email: 'user@example.com',
+      displayName: 'Local User'
+    };
+    const mockHousehold = `household_${Date.now()}`;
+    
+    localStorage.setItem('local_user', JSON.stringify(mockUser));
+    localStorage.setItem('local_household', mockHousehold);
+    
+    setUser(mockUser);
+    setHouseholdId(mockHousehold);
   };
 
   const signOut = async () => {
-    try {
-      await firebaseSignOut(auth);
-    } catch (error) {
-      console.error('Error signing out', error);
-      throw error;
-    }
+    localStorage.removeItem('local_user');
+    localStorage.removeItem('local_household');
+    setUser(null);
+    setHouseholdId(null);
   };
 
   return (

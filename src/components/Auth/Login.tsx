@@ -21,10 +21,10 @@ export function Login() {
         
         <button
           onClick={signInWithGoogle}
-          className="w-full flex items-center justify-center gap-3 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300 px-6 py-4 rounded-xl font-medium hover:bg-stone-50 dark:hover:bg-stone-700 transition-colors shadow-sm"
+          className="w-full flex items-center justify-center gap-3 bg-emerald-600 border border-emerald-700 text-white px-6 py-4 rounded-xl font-medium hover:bg-emerald-700 transition-colors shadow-sm"
         >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
-          Accedi con Google
+          <LogIn className="w-6 h-6" />
+          Accedi all'App
         </button>
       </div>
     </div>

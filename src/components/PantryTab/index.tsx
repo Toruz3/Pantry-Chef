@@ -9,6 +9,7 @@ import { SortOption, SORT_OPTIONS } from '../../constants/sortOptions';
 import { ProductCard } from './ProductCard';
 import { ProductActionSheet } from './ProductActionSheet';
 import { PantrySkeleton } from '../ui/Skeleton';
+import { PullToRefresh } from '../ui/PullToRefresh';
 import { cn } from '../../lib/utils';
 
 import { useProductsContext } from '../../contexts/ProductsContext';
@@ -175,16 +176,23 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
     )
   }), [pantryLayout]);
 
+  const handleRefresh = async () => {
+    // Simulate a network request for local data
+    await new Promise(resolve => setTimeout(resolve, 800));
+    // In a real app, this would fetch new data
+  };
+
   return (
-    <motion.div
-      ref={ref}
-      key="pantry"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.2 }}
-      className="space-y-6 pb-nav-safe sm:pb-0"
-    >
+    <PullToRefresh onRefresh={handleRefresh}>
+      <motion.div
+        ref={ref}
+        key="pantry"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.2 }}
+        className="space-y-6 pb-nav-safe sm:pb-0"
+      >
       <section className="pt-2 sm:pt-8 relative">
         <div className="text-center mb-8">
           <img src="/logo.png" alt="Chef da Dispensa Logo" className="w-16 h-16 rounded-2xl shadow-sm mx-auto mb-4 object-cover" referrerPolicy="no-referrer" />
@@ -386,7 +394,10 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
             </button>
           </div>
         ) : (
-          <div className="h-full">
+          <div 
+            className="h-full transition-all duration-300" 
+            style={{ paddingBottom: isSelectionMode && selectedIds.size > 0 ? '160px' : '0px' }}
+          >
             <GroupedVirtuoso
               ref={virtuosoRef}
               useWindowScroll
@@ -395,7 +406,7 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
               groupContent={index => {
                 const category = virtuosoData.groups[index];
                 return (
-                  <div className="flex items-center py-3 bg-stone-50 dark:bg-stone-950 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+                  <div className="flex items-center py-3 bg-stone-50 dark:bg-stone-950 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 relative z-30">
                     <div className="flex items-center gap-2">
                       <h3 className="text-base font-bold text-stone-800 dark:text-stone-200">{category}</h3>
                       <span className="text-xl" aria-hidden="true">{CATEGORY_EMOJIS[category]}</span>
@@ -507,5 +518,6 @@ export const PantryTab = React.forwardRef<HTMLDivElement, PantryTabProps>(({
         }}
       />
     </motion.div>
+    </PullToRefresh>
   );
 });

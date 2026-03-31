@@ -12,6 +12,8 @@ import { useStats } from './hooks/useStats';
 import { MainLayout } from './components/Layout/MainLayout';
 import { PantrySkeleton, RecipeSkeleton, StatsSkeleton, SettingsSkeleton } from './components/ui/Skeleton';
 
+import { DelayedFallback } from './components/ui/DelayedFallback';
+
 const AddProductModal = React.lazy(() => import('./components/AddTab').then(m => ({ default: m.AddProductModal })));
 const PantryTab = React.lazy(() => import('./components/PantryTab').then(m => ({ default: m.PantryTab })));
 const RecipeTab = React.lazy(() => import('./components/RecipeTab').then(m => ({ default: m.RecipeTab })));
@@ -137,7 +139,7 @@ function MainAppContent() {
       <AnimatePresence mode="wait">
         {/* ── Pantry tab ──────────────────────────────────────────────────── */}
         {activeTab === 'pantry' && (
-          <React.Suspense fallback={<div className="p-4 sm:p-6"><PantrySkeleton /></div>}>
+          <React.Suspense fallback={<DelayedFallback><div className="p-4 sm:p-6"><PantrySkeleton /></div></DelayedFallback>}>
             <PantryTab
               key="pantry"
               setShowAddSheet={setShowAddSheet}
@@ -151,7 +153,7 @@ function MainAppContent() {
 
         {/* ── Recipe tab ──────────────────────────────────────────────────── */}
         {activeTab === 'recipe' && (
-          <React.Suspense fallback={<div className="p-4 sm:p-6"><RecipeSkeleton /></div>}>
+          <React.Suspense fallback={<DelayedFallback><div className="p-4 sm:p-6"><RecipeSkeleton /></div></DelayedFallback>}>
             <RecipeTab
               key="recipe"
               recipes={recipes}
@@ -173,7 +175,7 @@ function MainAppContent() {
 
         {/* ── Stats tab ───────────────────────────────────────────────────── */}
         {activeTab === 'stats' && (
-          <React.Suspense fallback={<div className="p-4 sm:p-6"><StatsSkeleton /></div>}>
+          <React.Suspense fallback={<DelayedFallback><div className="p-4 sm:p-6"><StatsSkeleton /></div></DelayedFallback>}>
             <StatsTab
               key="stats"
               stats={stats}
@@ -183,7 +185,7 @@ function MainAppContent() {
 
         {/* ── Settings tab ────────────────────────────────────────────────── */}
         {activeTab === 'settings' && (
-          <React.Suspense fallback={<div className="p-4 sm:p-6"><SettingsSkeleton /></div>}>
+          <React.Suspense fallback={<DelayedFallback><div className="p-4 sm:p-6"><SettingsSkeleton /></div></DelayedFallback>}>
             <SettingsTab
               key="settings"
               settings={settings}

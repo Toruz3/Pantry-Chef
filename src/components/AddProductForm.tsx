@@ -82,7 +82,7 @@ export function AddProductForm({ onAddProduct, isCategorizing, onSuccess, initia
         <div className="flex gap-4">
           <div className="flex-1">
             <label htmlFor="quantity" className="block text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-1.5">Quantità</label>
-            <input type="number" id="quantity" min="0" step="1" inputMode="numeric"
+            <input type="number" id="quantity" min="0" step="any" inputMode="decimal"
               value={quantity}
               onChange={(e) => setQuantity(e.target.value === '' ? '' : Number(e.target.value))}
               placeholder="es. 500"

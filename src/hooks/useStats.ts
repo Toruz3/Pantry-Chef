@@ -2,10 +2,7 @@ import { useState, useEffect } from 'react';
 import { UserStats, Badge, WeeklyChallenge } from '../types';
 import { differenceInDays, parseISO, addDays, startOfWeek } from 'date-fns';
 import { toast } from 'react-hot-toast';
-import { doc, onSnapshot, updateDoc, setDoc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
 import confetti from 'canvas-confetti';
 
 // Averages per item
@@ -66,40 +63,23 @@ export function useStats() {
       return;
     }
 
-    const userDocRef = doc(db, 'users', user.uid);
-    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        let currentStats = data.stats as UserStats;
-        
-        if (!currentStats) {
-          currentStats = DEFAULT_STATS;
-        }
+    const storedStats = localStorage.getItem(`stats_${user.uid}`);
+    let currentStats = storedStats ? JSON.parse(storedStats) : DEFAULT_STATS;
+    
+    // Check if challenges need to be generated or refreshed
+    const now = Date.now();
+    if (!currentStats.weeklyChallenges || currentStats.weeklyChallenges.length === 0 || currentStats.weeklyChallenges[0].expiresAt < now) {
+      currentStats.weeklyChallenges = generateWeeklyChallenges();
+      updateStatsInStorage(currentStats); // Update immediately
+    }
 
-        // Check if challenges need to be generated or refreshed
-        const now = Date.now();
-        if (!currentStats.weeklyChallenges || currentStats.weeklyChallenges.length === 0 || currentStats.weeklyChallenges[0].expiresAt < now) {
-          currentStats.weeklyChallenges = generateWeeklyChallenges();
-          updateStatsInFirestore(currentStats); // Update immediately
-        }
-
-        setStats(currentStats);
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
-    });
-
-    return () => unsubscribe();
+    setStats(currentStats);
   }, [user]);
 
-  const updateStatsInFirestore = async (newStats: UserStats) => {
+  const updateStatsInStorage = async (newStats: UserStats) => {
     if (!user) return;
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, { stats: newStats });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
-    }
+    localStorage.setItem(`stats_${user.uid}`, JSON.stringify(newStats));
+    setStats(newStats);
   };
 
   const updateStreak = (currentStats: UserStats): UserStats => {
@@ -216,7 +196,7 @@ export function useStats() {
       newStats.badges = newBadges;
     }
 
-    await updateStatsInFirestore(newStats);
+    await updateStatsInStorage(newStats);
   };
 
   const recordWaste = async (quantity: number = 1, category?: string) => {
@@ -240,12 +220,12 @@ export function useStats() {
     const challenges = updateChallenges(newStats, 'streak', newStats.currentStreak);
     newStats.weeklyChallenges = challenges;
     
-    await updateStatsInFirestore(newStats);
+    await updateStatsInStorage(newStats);
   };
 
   const resetStats = async () => {
     if (!user) return;
-    await updateStatsInFirestore(DEFAULT_STATS);
+    await updateStatsInStorage(DEFAULT_STATS);
     toast.success('Statistiche azzerate con successo!');
   };
 

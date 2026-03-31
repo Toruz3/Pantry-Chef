@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { Loader2, Barcode, Mic, Square, Receipt, X, Sparkles, AlertCircle, Check, Package } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AddProductForm } from './AddProductForm';
@@ -56,7 +56,32 @@ export function AddProductModal({
   products
 }: AddProductModalProps) {
 
-  const [keyboardOffset, setKeyboardOffset] = React.useState(0);
+  const dragControls = useDragControls();
+
+  // Handle native back button
+  const onCloseRef = React.useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ modal: 'addProduct' }, '');
+      
+      const handlePopState = () => {
+        onCloseRef.current();
+      };
+      
+      window.addEventListener('popstate', handlePopState);
+      
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+        if (window.history.state?.modal === 'addProduct') {
+          window.history.back();
+        }
+      };
+    }
+  }, [isOpen]);
 
   // Prevent background scrolling when modal is open
   useEffect(() => {
@@ -72,24 +97,6 @@ export function AddProductModal({
       };
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    
-    const handler = () => {
-      // Su iOS il bottom sheet deve spostarsi, non comprimersi
-      const offset = window.innerHeight - viewport.height - viewport.offsetTop;
-      setKeyboardOffset(Math.max(0, offset));
-    };
-    
-    viewport.addEventListener('resize', handler);
-    viewport.addEventListener('scroll', handler);
-    return () => {
-      viewport.removeEventListener('resize', handler);
-      viewport.removeEventListener('scroll', handler);
-    };
-  }, []);
 
   const handleConfirmAudioProducts = () => {
     if (!audioParsedProducts) return;
@@ -177,29 +184,33 @@ export function AddProductModal({
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             drag="y"
+            dragControls={dragControls}
+            dragListener={false}
             dragConstraints={{ top: 0 }}
             dragElastic={0.2}
             onDragEnd={(_, info) => {
               if (info.offset.y > 100 || info.velocity.y > 500) onClose();
             }}
-            style={{ bottom: keyboardOffset }}
-            className="fixed inset-x-0 z-[70] bg-stone-50 dark:bg-stone-950 rounded-t-3xl shadow-2xl border-t border-stone-200 dark:border-stone-800 h-[90vh] flex flex-col sm:max-w-2xl sm:mx-auto sm:h-[85vh] sm:rounded-3xl sm:border"
+            className="fixed inset-x-0 bottom-0 z-[70] bg-stone-50 dark:bg-stone-950 rounded-t-3xl shadow-2xl border-t border-stone-200 dark:border-stone-800 h-[90vh] flex flex-col sm:max-w-2xl sm:mx-auto sm:h-[85vh] sm:rounded-3xl sm:border"
           >
-            {/* Drag handle visuale */}
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="w-10 h-1 bg-stone-300 dark:bg-stone-700 rounded-full" />
-            </div>
-
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-t-3xl shrink-0">
-              <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">Aggiungi Prodotto</h2>
-              <button
-                onClick={onClose}
-                className="p-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 rounded-full bg-stone-100 dark:bg-stone-800 transition-colors"
-                aria-label="Chiudi"
-              >
-                <X className="w-5 h-5" />
-              </button>
+            {/* Drag handle visuale & Header */}
+            <div 
+              className="shrink-0 touch-none"
+              onPointerDown={(e) => dragControls.start(e)}
+            >
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 bg-stone-300 dark:bg-stone-700 rounded-full" />
+              </div>
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-t-3xl">
+                <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">Aggiungi Prodotto</h2>
+                <button
+                  onClick={onClose}
+                  className="p-2 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 rounded-full bg-stone-100 dark:bg-stone-800 transition-colors"
+                  aria-label="Chiudi"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Scrollable Content */}
@@ -343,7 +354,7 @@ export function AddProductModal({
                           )}>
                             Quantità {isMissingQuantity && <span className="font-bold">*</span>}
                           </label>
-                          <input type="number" min="1" step="1" inputMode="numeric" value={product.quantity}
+                          <input type="number" min="0" step="any" inputMode="decimal" value={product.quantity}
                             onChange={(e) => handleUpdateAudioProduct(index, 'quantity', e.target.value ? Number(e.target.value) : '')}
                             className={cn(
                               'w-full bg-white dark:bg-stone-900 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 text-base border dark:text-stone-100',

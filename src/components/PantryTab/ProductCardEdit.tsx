@@ -80,7 +80,7 @@ export function ProductCardEdit({ product, onSave, onCancel }: ProductCardEditPr
                   <Minus className="w-4 h-4" />
                 </button>
                 <input
-                  type="number" min="1" step="1" inputMode="numeric"
+                  type="number" min="0" step="any" inputMode="decimal"
                   value={editQuantity}
                   onChange={(e) => setEditQuantity(e.target.value ? Number(e.target.value) : '')}
                   className="w-full bg-transparent text-center py-3 sm:py-2 focus:outline-none text-base dark:text-white"

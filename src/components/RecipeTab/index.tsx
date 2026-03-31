@@ -118,13 +118,14 @@ export const RecipeTab = React.forwardRef<HTMLDivElement, RecipeTabProps>(({
               <button
                 key={id}
                 onClick={() => onOpenPreferences(id)}
-                disabled={isGenerating || products.length === 0}
+                disabled={isGenerating}
                 className={cn(
                   'flex flex-col items-center justify-center gap-2.5',
                   'rounded-2xl border-2 p-4 font-semibold text-sm',
                   'transition-all active:scale-95',
                   'disabled:opacity-40 disabled:cursor-not-allowed',
                   card,
+                  products.length === 0 && !isGenerating && 'opacity-60 grayscale'
                 )}
               >
                 {loading
@@ -313,7 +314,7 @@ export const RecipeTab = React.forwardRef<HTMLDivElement, RecipeTabProps>(({
                             <span className="font-medium text-stone-700 dark:text-stone-300">{item.name}</span>
                             <div className="flex items-center gap-2 shrink-0">
                               <input
-                                type="number" min="0" step="1" inputMode="numeric"
+                                type="number" min="0" step="any" inputMode="decimal"
                                 value={item.quantity === 0 ? '' : item.quantity}
                                 onChange={(e) => onEditedQuantityChange(i, e.target.value)}
                                 className="w-16 sm:w-20 px-2 py-1.5 border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-950 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:text-stone-100 text-base"

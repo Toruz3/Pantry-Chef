@@ -1,18 +1,11 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { format } from 'date-fns';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { handleFirestoreError, OperationType } from '../utils/firestoreErrorHandler';
-import { Product, Category, CATEGORIES } from '../types';
-import { SortOption } from '../constants/sortOptions';
-import { PRODUCT_UNITS } from '../constants/units';
+import { Product } from '../types';
 import { categorizeProduct } from '../services/gemini';
 import { haptics } from '../utils/haptics';
 import { showUndoToast } from '../utils/undoToast';
 import { useProductFilters } from './useProductFilters';
-import toast from 'react-hot-toast';
 
 export function useProducts() {
   const { householdId } = useAuth();
@@ -27,21 +20,21 @@ export function useProducts() {
     }
 
     setIsLoading(true);
-    const q = query(collection(db, 'products'), where('householdId', '==', householdId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedProducts: Product[] = [];
-      snapshot.forEach((doc) => {
-        loadedProducts.push({ id: doc.id, ...doc.data() } as Product);
-      });
-      setProducts(loadedProducts);
-      setIsLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'products');
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
+    const storedProducts = localStorage.getItem(`products_${householdId}`);
+    if (storedProducts) {
+      setProducts(JSON.parse(storedProducts));
+    } else {
+      setProducts([]);
+    }
+    setIsLoading(false);
   }, [householdId]);
+
+  // Save products to local storage whenever they change
+  useEffect(() => {
+    if (householdId && !isLoading) {
+      localStorage.setItem(`products_${householdId}`, JSON.stringify(products));
+    }
+  }, [products, householdId, isLoading]);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isCategorizing, setIsCategorizing] = useState(false);
@@ -98,7 +91,8 @@ export function useProducts() {
     try {
       const category = await categorizeProduct(trimmedName);
 
-      const newProduct = {
+      const newProduct: Product = {
+        id: uuidv4(),
         householdId,
         name: trimmedName,
         expirationDate: productData.expirationDate,
@@ -110,13 +104,13 @@ export function useProducts() {
         addedAt: new Date().toISOString()
       };
 
-      await addDoc(collection(db, 'products'), newProduct);
+      setProducts(prev => [...prev, newProduct]);
       
       haptics.success();
       if (onSuccess) onSuccess();
     } catch (err) {
       if (onError) onError("Errore durante l'aggiunta del prodotto.");
-      handleFirestoreError(err, OperationType.CREATE, 'products');
+      console.error(err);
     } finally {
       setIsCategorizing(false);
     }
@@ -124,21 +118,14 @@ export function useProducts() {
 
   const addProducts = async (newProducts: Omit<Product, 'id'>[]) => {
     if (!householdId) return;
-    try {
-      const batch = writeBatch(db);
-      newProducts.forEach(p => {
-        const docRef = doc(collection(db, 'products'));
-        batch.set(docRef, {
-          ...p,
-          householdId,
-          location: p.location || 'dispensa',
-          addedAt: new Date().toISOString()
-        });
-      });
-      await batch.commit();
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'products');
-    }
+    const productsToAdd = newProducts.map(p => ({
+      ...p,
+      id: uuidv4(),
+      householdId,
+      location: p.location || 'dispensa',
+      addedAt: new Date().toISOString()
+    }));
+    setProducts(prev => [...prev, ...productsToAdd]);
   };
 
   const handleDeleteProduct = async (id: string) => {
@@ -147,24 +134,11 @@ export function useProducts() {
     const productToDelete = products.find(p => p.id === id);
     if (!productToDelete) return;
 
-    // Aggiornamento ottimistico locale
     setProducts(prev => prev.filter(p => p.id !== id));
 
     showUndoToast('Prodotto eliminato', async () => {
-      try {
-        await setDoc(doc(db, 'products', id), productToDelete);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.CREATE, `products/${id}`);
-      }
-    });
-
-    try {
-      await deleteDoc(doc(db, 'products', id));
-    } catch (error) {
-      // Rollback in caso di errore
       setProducts(prev => [...prev, productToDelete]);
-      handleFirestoreError(error, OperationType.DELETE, `products/${id}`);
-    }
+    });
   };
 
   const handleConsumeProduct = async (id: string, quantityToConsume: number = 1) => {
@@ -177,7 +151,6 @@ export function useProducts() {
     const newQuantity = product.quantity - quantityToConsume;
     const originalQuantity = product.quantity;
 
-    // Aggiornamento ottimistico locale
     if (newQuantity <= 0) {
       setProducts(prev => prev.filter(p => p.id !== id));
     } else {
@@ -187,25 +160,6 @@ export function useProducts() {
     }
 
     showUndoToast('Prodotto consumato', async () => {
-      try {
-        if (newQuantity <= 0) {
-          await setDoc(doc(db, 'products', id), product);
-        } else {
-          await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
-        }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-      }
-    });
-
-    try {
-      if (newQuantity <= 0) {
-        await deleteDoc(doc(db, 'products', id));
-      } else {
-        await updateDoc(doc(db, 'products', id), { quantity: newQuantity });
-      }
-    } catch (error) {
-      // Rollback in caso di errore
       if (newQuantity <= 0) {
         setProducts(prev => [...prev, product]);
       } else {
@@ -213,8 +167,7 @@ export function useProducts() {
           p.id === id ? { ...p, quantity: originalQuantity } : p
         ));
       }
-      handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-    }
+    });
   };
 
   const handleWasteProduct = async (id: string, quantityToWaste: number = 1) => {
@@ -227,7 +180,6 @@ export function useProducts() {
     const newQuantity = product.quantity - quantityToWaste;
     const originalQuantity = product.quantity;
 
-    // Aggiornamento ottimistico locale
     if (newQuantity <= 0) {
       setProducts(prev => prev.filter(p => p.id !== id));
     } else {
@@ -237,25 +189,6 @@ export function useProducts() {
     }
 
     showUndoToast('Prodotto buttato', async () => {
-      try {
-        if (newQuantity <= 0) {
-          await setDoc(doc(db, 'products', id), product);
-        } else {
-          await updateDoc(doc(db, 'products', id), { quantity: originalQuantity });
-        }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-      }
-    });
-
-    try {
-      if (newQuantity <= 0) {
-        await deleteDoc(doc(db, 'products', id));
-      } else {
-        await updateDoc(doc(db, 'products', id), { quantity: newQuantity });
-      }
-    } catch (error) {
-      // Rollback in caso di errore
       if (newQuantity <= 0) {
         setProducts(prev => [...prev, product]);
       } else {
@@ -263,16 +196,12 @@ export function useProducts() {
           p.id === id ? { ...p, quantity: originalQuantity } : p
         ));
       }
-      handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-    }
+    });
   };
 
   const consumeProducts = async (usedProducts: { productId: string; quantity: number }[]) => {
     if (!householdId) return;
     
-    const originalProducts = [...products];
-    
-    // Aggiornamento ottimistico locale
     setProducts(prev => {
       let next = [...prev];
       for (const usedItem of usedProducts) {
@@ -289,27 +218,6 @@ export function useProducts() {
       }
       return next;
     });
-
-    try {
-      const batch = writeBatch(db);
-      for (const usedItem of usedProducts) {
-        const product = originalProducts.find(p => p.id === usedItem.productId);
-        if (product) {
-          const newQty = product.quantity - usedItem.quantity;
-          const docRef = doc(db, 'products', product.id);
-          if (newQty <= 0) {
-            batch.delete(docRef);
-          } else {
-            batch.update(docRef, { quantity: newQty });
-          }
-        }
-      }
-      await batch.commit();
-    } catch (error) {
-      // Rollback in caso di errore
-      setProducts(originalProducts);
-      handleFirestoreError(error, OperationType.UPDATE, 'products');
-    }
   };
 
   const handleEditProduct = (product: Product) => {
@@ -321,29 +229,10 @@ export function useProducts() {
 
     haptics.success();
     
-    const originalProduct = products.find(p => p.id === id);
-    if (!originalProduct) return;
-
-    // Aggiornamento ottimistico locale
     setProducts(prev => prev.map(p => 
       p.id === id ? { ...p, ...updatedProduct, isEstimate: false } : p
     ));
     setEditingProductId(null);
-
-    try {
-      const productRef = doc(db, 'products', id);
-      await updateDoc(productRef, {
-        ...updatedProduct,
-        isEstimate: false
-      });
-    } catch (error) {
-      // Rollback in caso di errore
-      setProducts(prev => prev.map(p => 
-        p.id === id ? originalProduct : p
-      ));
-      setEditingProductId(id);
-      handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
-    }
   };
 
   const handleCancelEdit = () => {
@@ -356,21 +245,8 @@ export function useProducts() {
     
     const originalProducts = [...products];
     
-    // Aggiornamento ottimistico locale
     setProducts([]);
     setShowClearConfirm(false);
-
-    try {
-      const batch = writeBatch(db);
-      originalProducts.forEach(p => {
-        batch.delete(doc(db, 'products', p.id));
-      });
-      await batch.commit();
-    } catch (error) {
-      // Rollback in caso di errore
-      setProducts(originalProducts);
-      handleFirestoreError(error, OperationType.DELETE, 'products');
-    }
   };
 
   return {

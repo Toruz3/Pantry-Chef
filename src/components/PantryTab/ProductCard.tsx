@@ -133,9 +133,9 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
       exit={{ opacity: 0, scale: 0.95 }}
       whileHover={!isSelectionMode ? { y: -2 } : {}}
       className={cn(
-        "relative group rounded-2xl transition-all duration-200 overflow-hidden select-none",
+        "relative group rounded-2xl transition-all duration-200 select-none",
         isSelectionMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
-        isSelected ? "ring-2 ring-emerald-500 bg-emerald-50/50 dark:bg-emerald-900/20" : "bg-white dark:bg-stone-900 shadow-sm border border-stone-200 dark:border-stone-800",
+        isSelected ? "border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/40 z-10" : "bg-white dark:bg-stone-900 shadow-sm border border-stone-200 dark:border-stone-800 z-0",
         layout === 'compact' ? "p-3" : "p-4"
       )}
       onClick={(e) => {
@@ -176,20 +176,20 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
         onDragEnd={(...args) => { setDragX(0); handleDragEnd(...args); }}
         animate={controls}
         className={cn(
-          "relative z-10 bg-white dark:bg-stone-900 rounded-2xl flex",
+          "relative z-10 rounded-2xl flex touch-pan-y",
+          isSelectionMode ? "bg-transparent" : "bg-white dark:bg-stone-900",
           layout === 'compact' ? "flex-row items-center gap-3" : "flex-col h-full"
         )}
       >
-        {/* Selection Checkbox */}
-        {isSelectionMode && (
+        {/* Selection Checkbox for Compact Layout */}
+        {isSelectionMode && layout === 'compact' && (
           <div className={cn(
-            "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
-            layout === 'grid' && "absolute top-4 left-4 z-20",
+            "flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
             isSelected 
               ? "bg-emerald-500 border-emerald-500" 
               : "border-stone-300 dark:border-stone-600"
           )}>
-            {isSelected && <Check className="w-4 h-4 text-white" />}
+            {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
           </div>
         )}
 
@@ -254,6 +254,17 @@ const ProductCardComponent = React.forwardRef<HTMLDivElement, ProductCardProps>(
                     <Sparkles className="w-4 h-4 text-amber-500 flex-shrink-0" />
                   )}
                 </div>
+                {/* Selection Checkbox for Grid Layout */}
+                {isSelectionMode && (
+                  <div className={cn(
+                    "flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors mt-0.5",
+                    isSelected 
+                      ? "bg-emerald-500 border-emerald-500" 
+                      : "border-stone-300 dark:border-stone-600"
+                  )}>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between gap-2">

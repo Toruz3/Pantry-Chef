@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Camera, Image as ImageIcon, X } from 'lucide-react';
 

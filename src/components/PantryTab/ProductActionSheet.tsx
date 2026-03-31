@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { X, Check, Minus, Plus } from 'lucide-react';
 import { Product } from '../../types';
 
@@ -13,12 +13,38 @@ interface ProductActionSheetProps {
 
 export function ProductActionSheet({ product, action, onClose, onConfirm }: ProductActionSheetProps) {
   const [quantity, setQuantity] = useState<number | ''>(1);
+  const dragControls = useDragControls();
 
   useEffect(() => {
     if (product) {
       setQuantity(1);
     }
   }, [product]);
+
+  // Handle native back button
+  const onCloseRef = React.useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (product && action) {
+      window.history.pushState({ modal: 'productAction' }, '');
+      
+      const handlePopState = () => {
+        onCloseRef.current();
+      };
+      
+      window.addEventListener('popstate', handlePopState);
+      
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+        if (window.history.state?.modal === 'productAction') {
+          window.history.back();
+        }
+      };
+    }
+  }, [product, action]);
 
   const handleConfirm = () => {
     if (quantity && quantity > 0 && product) {
@@ -49,9 +75,11 @@ export function ProductActionSheet({ product, action, onClose, onConfirm }: Prod
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="bg-white dark:bg-stone-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl relative z-10 overflow-hidden"
+            className="bg-white dark:bg-stone-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
             drag="y"
-            dragConstraints={{ top: 0, bottom: 0 }}
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0 }}
             dragElastic={0.2}
             onDragEnd={(e, { offset, velocity }) => {
               if (offset.y > 100 || velocity.y > 500) {
@@ -59,16 +87,23 @@ export function ProductActionSheet({ product, action, onClose, onConfirm }: Prod
               }
             }}
           >
-            <div className="w-12 h-1.5 bg-stone-300 dark:bg-stone-700 rounded-full mx-auto mt-3 mb-2 sm:hidden" />
-            
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-stone-900 dark:text-stone-100">{title}</h3>
-                <button onClick={onClose} className="p-2 bg-stone-100 dark:bg-stone-800 rounded-full text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200">
-                  <X className="w-5 h-5" />
-                </button>
+            <div 
+              className="shrink-0 touch-none"
+              onPointerDown={(e) => dragControls.start(e)}
+            >
+              <div className="w-12 h-1.5 bg-stone-300 dark:bg-stone-700 rounded-full mx-auto mt-3 mb-2 sm:hidden" />
+              
+              <div className="p-6 pb-0">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-stone-900 dark:text-stone-100">{title}</h3>
+                  <button onClick={onClose} className="p-2 bg-stone-100 dark:bg-stone-800 rounded-full text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
+            </div>
 
+            <div className="p-6 pt-0 overflow-y-auto">
               <p className="text-stone-600 dark:text-stone-400 mb-6">
                 Quanti <span className="font-bold text-stone-900 dark:text-stone-100">{product.name}</span> hai {isConsume ? 'consumato' : 'buttato'}?
                 (Disponibili: {product.quantity} {product.unit})

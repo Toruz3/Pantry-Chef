@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { ChefHat, Users, Utensils, Loader2, Mic, Square, Minus, Plus, Waves, Wind, X } from 'lucide-react';
 import { transcribeAudio } from '../../services/gemini';
@@ -91,12 +92,14 @@ export function PreferencesModal({ mealType, isGenerating, onConfirm, onCancel }
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-sm"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
@@ -249,6 +252,7 @@ export function PreferencesModal({ mealType, isGenerating, onConfirm, onCancel }
           </button>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body
   );
 }

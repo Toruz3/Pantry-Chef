@@ -1,13 +1,13 @@
-import React, { Suspense } from 'react';
+import React from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 
-const ClearConfirmModal = React.lazy(() => import('./ClearConfirmModal').then(m => ({ default: m.ClearConfirmModal })));
-const PreferencesModal = React.lazy(() => import('./PreferencesModal').then(m => ({ default: m.PreferencesModal })));
-const ListeningModal = React.lazy(() => import('./ListeningModal').then(m => ({ default: m.ListeningModal })));
-const BarcodeScannerModal = React.lazy(() => import('./BarcodeScannerModal').then(m => ({ default: m.BarcodeScannerModal })));
-const SettingsModal = React.lazy(() => import('./SettingsModal').then(m => ({ default: m.SettingsModal })));
-const ReceiptSourceModal = React.lazy(() => import('./ReceiptSourceModal').then(m => ({ default: m.ReceiptSourceModal })));
+import { ClearConfirmModal } from './ClearConfirmModal';
+import { PreferencesModal } from './PreferencesModal';
+import { ListeningModal } from './ListeningModal';
+import { BarcodeScannerModal } from './BarcodeScannerModal';
+import { SettingsModal } from './SettingsModal';
+import { ReceiptSourceModal } from './ReceiptSourceModal';
 
 interface ModalsContainerProps {
   isReceiptModalOpen: boolean;
@@ -45,7 +45,7 @@ export function ModalsContainer({
   handleReceiptUpload
 }: ModalsContainerProps) {
   return (
-    <Suspense fallback={null}>
+    <>
       <input 
         type="file" 
         accept="image/*" 
@@ -116,6 +116,6 @@ export function ModalsContainer({
           />
         )}
       </AnimatePresence>
-    </Suspense>
+    </>
   );
 }

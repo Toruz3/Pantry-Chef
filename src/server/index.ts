@@ -1,4 +1,3 @@
-import "dotenv/config";
 import express from "express";
 import {
   processReceiptImage,
@@ -8,6 +7,11 @@ import {
   analyzeAudioProducts,
   generateRecipe
 } from "./gemini";
+
+// Only load dotenv in development
+if (process.env.NODE_ENV !== "production") {
+  import("dotenv/config").catch(() => {});
+}
 
 const app = express();
 const PORT = 3000;
@@ -82,17 +86,11 @@ app.post("/api/gemini/generate-recipe", async (req, res) => {
 
 // Vite middleware for development
 if (process.env.NODE_ENV !== "production") {
-  import("vite").then(async ({ createServer: createViteServer }) => {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-    
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }).catch(console.error);
+  // In development, we rely on the standard Vite dev server setup
+  // rather than trying to dynamically import it here to avoid Vercel build issues
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
 export default app;

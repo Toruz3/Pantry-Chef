@@ -1,8 +1,0 @@
-{
-  "name": "Food Expiry Tracker & Recipe Generator",
-  "description": "Track food expiration dates and generate recipes using Gemini AI to reduce food waste.",
-  "requestFramePermissions": [
-    "microphone",
-    "camera"
-  ]
-}

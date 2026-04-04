@@ -13,6 +13,9 @@ const PORT = 3000;
 
 console.log("Starting server...");
 console.log("GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
+if (process.env.GEMINI_API_KEY) {
+  console.log("GEMINI_API_KEY prefix:", process.env.GEMINI_API_KEY.substring(0, 10) + "...");
+}
 console.log("API_KEY exists:", !!process.env.API_KEY);
 
 // Increase payload limit for base64 images/audio

@@ -1,193 +1,268 @@
-import { GoogleGenAI } from "@google/genai";
+/**
+ * Server-side Gemini integration using the REST API directly.
+ * This avoids any SDK bundling issues on Vercel serverless functions.
+ */
 import {
+  Category,
+  CATEGORIES,
   ExtractedProduct,
   AudioExtractedProduct,
   GeneratedRecipe,
-  Category,
   ReceiptExtractedProduct,
-  CATEGORIES,
 } from "../types";
 
-// ─── Client singleton ──────────────────────────────────────────────────────
-function getClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-  if (!apiKey) {
+// ─── Config ────────────────────────────────────────────────────────────────
+
+const GEMINI_MODEL = "gemini-2.0-flash";
+
+function getApiKey(): string {
+  const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!key) {
     throw new Error(
-      "GEMINI_API_KEY is not set. Add it to your Vercel environment variables."
+      "GEMINI_API_KEY non configurata. Aggiungila nelle variabili d'ambiente di Vercel."
     );
   }
-  return new GoogleGenAI({ apiKey });
+  return key;
 }
 
-const MODEL = "gemini-2.0-flash";
+function geminiUrl(model = GEMINI_MODEL): string {
+  return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${getApiKey()}`;
+}
 
-// ─── Helper ────────────────────────────────────────────────────────────────
-function safeParseJSON<T>(text: string): T {
-  // Strip markdown code fences if present
-  const cleaned = text
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```\s*$/i, "")
+// ─── Core fetch helper ────────────────────────────────────────────────────
+
+interface GeminiPart {
+  text?: string;
+  inlineData?: { mimeType: string; data: string };
+}
+
+interface GeminiRequest {
+  contents: Array<{ role: string; parts: GeminiPart[] }>;
+  generationConfig?: {
+    temperature?: number;
+    maxOutputTokens?: number;
+  };
+}
+
+async function callGemini(payload: GeminiRequest): Promise<string> {
+  const response = await fetch(geminiUrl(), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    let errMsg = `Errore Gemini API (${response.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      errMsg = errJson?.error?.message ?? errMsg;
+    } catch {
+      errMsg = `${errMsg}: ${errText.slice(0, 200)}`;
+    }
+    throw new Error(errMsg);
+  }
+
+  const data = await response.json();
+  const text: string =
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  if (!text) {
+    throw new Error("Gemini ha restituito una risposta vuota.");
+  }
+
+  return text;
+}
+
+// ─── JSON cleaner ─────────────────────────────────────────────────────────
+
+function extractJSON(text: string): string {
+  let clean = text
+    .replace(/^```(?:json)?\s*/im, "")
+    .replace(/\s*```\s*$/m, "")
     .trim();
-  return JSON.parse(cleaned) as T;
+
+  const firstBracket = clean.search(/[\[{]/);
+  const lastBracket = Math.max(clean.lastIndexOf("]"), clean.lastIndexOf("}"));
+
+  if (firstBracket !== -1 && lastBracket !== -1) {
+    clean = clean.slice(firstBracket, lastBracket + 1);
+  }
+
+  return clean;
+}
+
+function safeParseJSON<T>(text: string): T {
+  const cleaned = extractJSON(text);
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (e) {
+    console.error("JSON parse failed. Raw text:", text.slice(0, 500));
+    throw new Error(`Impossibile interpretare la risposta dell'AI: ${String(e)}`);
+  }
 }
 
 // ─── processReceiptImage ──────────────────────────────────────────────────
+
 export async function processReceiptImage(
   base64Image: string,
   mimeType: string
 ): Promise<ReceiptExtractedProduct[]> {
-  const ai = getClient();
-
-  const prompt = `Analizza questo scontrino e restituisci SOLO un array JSON (nessun testo extra) con i prodotti alimentari trovati.
-Schema di ogni oggetto:
-{
-  "name": "nome del prodotto",
-  "quantity": numero (usa 1 se non chiaro),
-  "unit": "pz" | "g" | "kg" | "l" | "ml" | "confezioni" | "scatolette",
-  "expirationDate": "YYYY-MM-DD" (stima ragionevole basata sul tipo di prodotto, es. latte = 7 giorni da oggi),
-  "category": una di: ${CATEGORIES.join(", ")}
-}
-Includi SOLO prodotti alimentari. Ignora prodotti per la casa, cosmetici, ecc.`;
-
   const today = new Date().toISOString().split("T")[0];
 
-  const result = await ai.models.generateContent({
-    model: MODEL,
+  const text = await callGemini({
     contents: [
       {
         role: "user",
         parts: [
+          { inlineData: { mimeType, data: base64Image } },
           {
-            inlineData: {
-              mimeType: mimeType as any,
-              data: base64Image,
-            },
-          },
-          {
-            text: `Data di oggi: ${today}. ${prompt}`,
+            text: `Data oggi: ${today}.
+Analizza questo scontrino. Restituisci SOLO un array JSON con i prodotti alimentari trovati.
+Nessun testo prima o dopo il JSON.
+
+Schema:
+[{
+  "name": "nome prodotto",
+  "quantity": 1,
+  "unit": "pz",
+  "expirationDate": "YYYY-MM-DD (stima: latte 7gg, pasta 365gg, frutta 5gg ecc.)",
+  "category": "una di: Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro"
+}]
+
+Includi SOLO prodotti alimentari.`,
           },
         ],
       },
     ],
+    generationConfig: { temperature: 0.2 },
   });
 
-  const text = result.text ?? "";
   return safeParseJSON<ReceiptExtractedProduct[]>(text);
 }
 
 // ─── categorizeProduct ────────────────────────────────────────────────────
+
 export async function categorizeProduct(productName: string): Promise<Category> {
-  const ai = getClient();
+  try {
+    const text = await callGemini({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Categorizza il prodotto alimentare "${productName}" in UNA di queste categorie: Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro.
+Rispondi con SOLE le parole della categoria, nient'altro.`,
+            },
+          ],
+        },
+      ],
+      generationConfig: { temperature: 0, maxOutputTokens: 20 },
+    });
 
-  const validCategories = CATEGORIES.join(", ");
-  const prompt = `Categorizza il prodotto alimentare "${productName}" in UNA delle seguenti categorie: ${validCategories}.
-Rispondi SOLO con il nome della categoria, senza nient'altro.`;
-
-  const result = await ai.models.generateContent({
-    model: MODEL,
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-  });
-
-  const text = (result.text ?? "").trim();
-  const matched = CATEGORIES.find(
-    (c) => c.toLowerCase() === text.toLowerCase()
-  );
-  return (matched as Category) ?? "Altro";
+    const trimmed = text.trim();
+    const validCategories: Category[] = ["Latticini","Carne e Pesce","Frutta e Verdura","Dispensa Secca","Surgelati","Bevande","Snack e Dolci","Altro"];
+    const match = validCategories.find(
+      (c) => c.toLowerCase() === trimmed.toLowerCase()
+    );
+    return match ?? "Altro";
+  } catch {
+    return "Altro";
+  }
 }
 
 // ─── analyzeProductImage ──────────────────────────────────────────────────
+
 export async function analyzeProductImage(
   base64Image: string,
   mimeType: string
 ): Promise<ExtractedProduct> {
-  const ai = getClient();
-
-  const prompt = `Analizza questa immagine di un prodotto alimentare e restituisci SOLO un oggetto JSON:
+  const text = await callGemini({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType, data: base64Image } },
+          {
+            text: `Analizza questa immagine di un prodotto alimentare.
+Restituisci SOLO un oggetto JSON, nessun testo extra:
 {
   "name": "nome del prodotto",
-  "expirationDate": "YYYY-MM-DD" oppure null se non visibile,
-  "category": una di: ${CATEGORIES.join(", ")}
-}`;
-
-  const result = await ai.models.generateContent({
-    model: MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { inlineData: { mimeType: mimeType as any, data: base64Image } },
-          { text: prompt },
-        ],
-      },
-    ],
-  });
-
-  return safeParseJSON<ExtractedProduct>(result.text ?? "{}");
-}
-
-// ─── transcribeAudio ──────────────────────────────────────────────────────
-export async function transcribeAudio(
-  base64Audio: string,
-  mimeType: string
-): Promise<string> {
-  const ai = getClient();
-
-  const result = await ai.models.generateContent({
-    model: MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          { inlineData: { mimeType: mimeType as any, data: base64Audio } },
-          {
-            text: "Trascrivi esattamente ciò che viene detto in questo audio in italiano. Restituisci SOLO il testo trascritto.",
+  "expirationDate": "YYYY-MM-DD oppure null",
+  "category": "una di: Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro"
+}`,
           },
         ],
       },
     ],
+    generationConfig: { temperature: 0.1 },
   });
 
-  return (result.text ?? "").trim();
+  return safeParseJSON<ExtractedProduct>(text);
 }
 
-// ─── analyzeAudioProducts ─────────────────────────────────────────────────
-export async function analyzeAudioProducts(
+// ─── transcribeAudio ──────────────────────────────────────────────────────
+
+export async function transcribeAudio(
   base64Audio: string,
   mimeType: string
-): Promise<AudioExtractedProduct[]> {
-  const ai = getClient();
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const prompt = `Ascolta questo audio e identifica tutti i prodotti alimentari menzionati.
-Restituisci SOLO un array JSON (nessun testo extra):
-[{
-  "name": "nome prodotto",
-  "quantity": numero oppure "" se non specificato,
-  "unit": "g" | "kg" | "ml" | "l" | "pz" | "scatolette" | "confezioni" oppure "" se non specificato,
-  "expirationDate": "YYYY-MM-DD" oppure null,
-  "category": una di: ${CATEGORIES.join(", ")},
-  "isEstimate": true se quantità/unità sono stime, false altrimenti
-}]
-Data di oggi: ${today}.`;
-
-  const result = await ai.models.generateContent({
-    model: MODEL,
+): Promise<string> {
+  const text = await callGemini({
     contents: [
       {
         role: "user",
         parts: [
-          { inlineData: { mimeType: mimeType as any, data: base64Audio } },
-          { text: prompt },
+          { inlineData: { mimeType, data: base64Audio } },
+          {
+            text: "Trascrivi esattamente ciò che viene detto in questo audio in italiano. Restituisci SOLO il testo trascritto, nient'altro.",
+          },
         ],
       },
     ],
+    generationConfig: { temperature: 0 },
   });
 
-  return safeParseJSON<AudioExtractedProduct[]>(result.text ?? "[]");
+  return text.trim();
+}
+
+// ─── analyzeAudioProducts ─────────────────────────────────────────────────
+
+export async function analyzeAudioProducts(
+  base64Audio: string,
+  mimeType: string
+): Promise<AudioExtractedProduct[]> {
+  const today = new Date().toISOString().split("T")[0];
+
+  const text = await callGemini({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType, data: base64Audio } },
+          {
+            text: `Data oggi: ${today}.
+Ascolta l'audio e identifica tutti i prodotti alimentari menzionati.
+Restituisci SOLO un array JSON, nessun testo extra:
+[{
+  "name": "nome prodotto",
+  "quantity": numero oppure "",
+  "unit": "g | kg | ml | l | pz | scatolette | confezioni oppure ''",
+  "expirationDate": "YYYY-MM-DD oppure null",
+  "category": "una di: Latticini, Carne e Pesce, Frutta e Verdura, Dispensa Secca, Surgelati, Bevande, Snack e Dolci, Altro",
+  "isEstimate": true
+}]`,
+          },
+        ],
+      },
+    ],
+    generationConfig: { temperature: 0.2 },
+  });
+
+  return safeParseJSON<AudioExtractedProduct[]>(text);
 }
 
 // ─── generateRecipe ───────────────────────────────────────────────────────
+
 export async function generateRecipe(
   products: {
     id: string;
@@ -201,11 +276,8 @@ export async function generateRecipe(
   appliances: { microwave: boolean; airFryer: boolean },
   userPreferences?: string,
   numberOfRecipes: number = 1,
-  _generateImage: boolean = false
+  _generateImage = false
 ): Promise<GeneratedRecipe[]> {
-  const ai = getClient();
-
-  // Sort by expiry to prioritise soon-to-expire ingredients
   const sorted = [...products].sort(
     (a, b) =>
       new Date(a.expirationDate).getTime() -
@@ -213,62 +285,56 @@ export async function generateRecipe(
   );
 
   const productList = sorted
-    .map(
-      (p) =>
-        `- ${p.name}: ${p.quantity} ${p.unit} (scade: ${p.expirationDate})`
-    )
+    .map((p) => `- ID:${p.id} | ${p.name}: ${p.quantity} ${p.unit} (scade: ${p.expirationDate})`)
     .join("\n");
 
   const applianceNote = [
-    appliances.microwave ? "microonde disponibile" : "",
-    appliances.airFryer ? "friggitrice ad aria disponibile" : "",
+    appliances.microwave && "microonde",
+    appliances.airFryer && "friggitrice ad aria",
   ]
     .filter(Boolean)
     .join(", ");
 
-  const preferencesNote = userPreferences
-    ? `Preferenze utente: ${userPreferences}.`
-    : "";
+  const text = await callGemini({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `Sei uno chef italiano esperto. Genera esattamente ${numberOfRecipes} ricett${numberOfRecipes === 1 ? "a" : "e"} per ${mealType}.
 
-  const prompt = `Sei uno chef italiano esperto. Genera ${numberOfRecipes} ricett${numberOfRecipes === 1 ? "a" : "e"} per ${mealType} usando PREFERIBILMENTE i prodotti in scadenza prima.
-
-PRODOTTI DISPONIBILI:
+PRODOTTI DISPONIBILI (preferisci quelli con scadenza più vicina):
 ${productList}
 
-VINCOLI:
+REQUISITI:
 - Porzioni: ${servings}
-- Pasto: ${mealType}
 ${applianceNote ? `- Elettrodomestici: ${applianceNote}` : ""}
-${preferencesNote}
+${userPreferences ? `- Preferenze: ${userPreferences}` : ""}
 
-Restituisci SOLO un array JSON valido (nessun testo, nessun markdown):
+Restituisci SOLO un array JSON valido con esattamente ${numberOfRecipes} element${numberOfRecipes === 1 ? "o" : "i"}.
+Nessun testo prima o dopo, nessun markdown, nessun backtick.
+
 [{
-  "title": "Nome Ricetta",
-  "ingredients": ["ingrediente con quantità", ...],
-  "instructions": ["passo 1", "passo 2", ...],
-  "prepTime": "es. 20 minuti",
+  "title": "Nome della Ricetta",
+  "ingredients": ["200g pasta", "2 uova", "sale q.b."],
+  "instructions": ["Passo 1: ...", "Passo 2: ..."],
+  "prepTime": "20 minuti",
   "servings": ${servings},
   "usedProducts": [
-    { "productId": "id del prodotto dalla lista", "name": "nome", "quantity": numero, "unit": "unità" }
+    { "productId": "ID_ESATTO_DALLA_LISTA_SOPRA", "name": "nome", "quantity": 200, "unit": "g" }
   ]
-}]
-
-Usa gli id esatti dall'elenco prodotti per usedProducts.productId.`;
-
-  const result = await ai.models.generateContent({
-    model: MODEL,
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    config: {
-      temperature: 0.8,
-    },
+}]`,
+          },
+        ],
+      },
+    ],
+    generationConfig: { temperature: 0.8, maxOutputTokens: 8192 },
   });
 
-  const text = result.text ?? "";
   const recipes = safeParseJSON<GeneratedRecipe[]>(text);
 
-  // Validate: ensure it's an array
-  if (!Array.isArray(recipes)) {
-    throw new Error("La risposta dell'AI non è un array di ricette valido.");
+  if (!Array.isArray(recipes) || recipes.length === 0) {
+    throw new Error("L'AI non ha generato ricette valide. Riprova.");
   }
 
   return recipes;

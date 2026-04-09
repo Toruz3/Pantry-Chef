@@ -13,7 +13,7 @@ import {
 
 // ─── Config ────────────────────────────────────────────────────────────────
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3-flash-preview";
 
 function getApiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.API_KEY;

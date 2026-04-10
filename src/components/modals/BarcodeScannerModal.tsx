@@ -14,6 +14,13 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [isStarting, setIsStarting] = useState(true);
   const lastScannedRef = useRef<{ text: string; time: number } | null>(null);
+  const onScanRef = useRef(onScan);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+    onCloseRef.current = onClose;
+  }, [onScan, onClose]);
 
   useEffect(() => {
     let mounted = true;
@@ -37,7 +44,7 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
               // Prevent scanning the same barcode within 3 seconds
               if (!last || last.text !== decodedText || (now - last.time > 3000)) {
                 lastScannedRef.current = { text: decodedText, time: now };
-                onScan(decodedText);
+                onScanRef.current(decodedText);
               }
             }
           },
@@ -51,7 +58,7 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
         if (mounted) {
           toast.error("Impossibile avviare la fotocamera. Verifica i permessi.");
           setIsStarting(false);
-          onClose();
+          onCloseRef.current();
         }
       }
     };
@@ -67,7 +74,7 @@ export function BarcodeScannerModal({ onClose, onScan }: Omit<BarcodeScannerModa
         scannerRef.current.stop().catch(console.error);
       }
     };
-  }, [onScan, onClose]);
+  }, []); // Empty dependency array so it only runs once on mount
 
   return (
     <motion.div 

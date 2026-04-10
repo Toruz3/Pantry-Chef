@@ -75,4 +75,10 @@ app.post("/api/gemini/generate-recipe", async (req, res) => {
   }
 });
 
+// Global error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("Unhandled Express error:", err);
+  res.status(500).json({ error: "Internal Server Error", details: err.message });
+});
+
 export default app;

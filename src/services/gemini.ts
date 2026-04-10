@@ -7,8 +7,13 @@ export async function processReceiptImage(base64Image: string, mimeType: string)
     body: JSON.stringify({ base64Image, mimeType }),
   });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to process receipt image');
+    const text = await response.text();
+    try {
+      const error = JSON.parse(text);
+      throw new Error(error.error || 'Failed to process receipt image');
+    } catch (e) {
+      throw new Error(`Server error (${response.status})`);
+    }
   }
   return response.json();
 }
@@ -20,8 +25,13 @@ export async function categorizeProduct(productName: string): Promise<Category> 
     body: JSON.stringify({ productName }),
   });
   if (!response.ok) {
-    const error = await response.json();
-    console.error(error.error || 'Failed to categorize product');
+    const text = await response.text();
+    try {
+      const error = JSON.parse(text);
+      console.error(error.error || 'Failed to categorize product');
+    } catch (e) {
+      console.error(`Server error (${response.status})`);
+    }
     return "Altro";
   }
   const data = await response.json();
@@ -35,8 +45,13 @@ export async function analyzeProductImage(base64Image: string, mimeType: string)
     body: JSON.stringify({ base64Image, mimeType }),
   });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to analyze product image');
+    const text = await response.text();
+    try {
+      const error = JSON.parse(text);
+      throw new Error(error.error || 'Failed to analyze product image');
+    } catch (e) {
+      throw new Error(`Server error (${response.status})`);
+    }
   }
   return response.json();
 }
@@ -48,8 +63,13 @@ export async function transcribeAudio(base64Audio: string, mimeType: string): Pr
     body: JSON.stringify({ base64Audio, mimeType }),
   });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to transcribe audio');
+    const text = await response.text();
+    try {
+      const error = JSON.parse(text);
+      throw new Error(error.error || 'Failed to transcribe audio');
+    } catch (e) {
+      throw new Error(`Server error (${response.status})`);
+    }
   }
   const data = await response.json();
   return data.text;
@@ -62,8 +82,13 @@ export async function analyzeAudioProducts(base64Audio: string, mimeType: string
     body: JSON.stringify({ base64Audio, mimeType }),
   });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to analyze audio products');
+    const text = await response.text();
+    try {
+      const error = JSON.parse(text);
+      throw new Error(error.error || 'Failed to analyze audio products');
+    } catch (e) {
+      throw new Error(`Server error (${response.status})`);
+    }
   }
   return response.json();
 }
@@ -85,12 +110,11 @@ export async function generateRecipe(
   
   if (!response.ok) {
     let errorMessage = 'Failed to generate recipe';
+    const text = await response.text();
     try {
-      const errorData = await response.json();
+      const errorData = JSON.parse(text);
       errorMessage = errorData.error || errorMessage;
     } catch (e) {
-      // If parsing JSON fails, it might be an HTML error page from Vercel
-      const text = await response.text();
       console.error("Non-JSON error response:", text);
       errorMessage = `Server error (${response.status}): The server encountered an issue.`;
     }
